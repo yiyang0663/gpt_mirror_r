@@ -6,9 +6,17 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: docker-main
+  cancel-in-progress: true
+
 permissions:
   contents: read
   packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+  DEPLOY_PATH: /opt/ChatGPT-Mirror
 
 jobs:
   docker:
@@ -32,7 +40,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short
@@ -47,3 +55,56 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    needs: docker
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Validate deploy secrets
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USERNAME: ${{ secrets.DEPLOY_USERNAME }}
+          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+        run: |
+          set -e
+          test -n "$DEPLOY_HOST" || { echo "Missing DEPLOY_HOST secret"; exit 1; }
+          test -n "$DEPLOY_USERNAME" || { echo "Missing DEPLOY_USERNAME secret"; exit 1; }
+          test -n "$DEPLOY_PASSWORD" || { echo "Missing DEPLOY_PASSWORD secret"; exit 1; }
+
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.2.5
+        env:
+          REPO_URL: https://github.com/${{ github.repository }}.git
+          DEPLOY_PATH: ${{ env.DEPLOY_PATH }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USERNAME }}
+          password: ${{ secrets.DEPLOY_PASSWORD }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          command_timeout: 30m
+          envs: REPO_URL,DEPLOY_PATH,GHCR_USERNAME,GHCR_TOKEN
+          script: |
+            set -e
+            export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
+
+            if [ ! -d "$DEPLOY_PATH/.git" ]; then
+              git clone --depth 1 "$REPO_URL" "$DEPLOY_PATH"
+            fi
+
+            cd "$DEPLOY_PATH"
+            git remote set-url origin "$REPO_URL"
+            git fetch origin main
+            git checkout main
+            git pull --ff-only origin main
+
+            if [ -n "$GHCR_USERNAME" ] && [ -n "$GHCR_TOKEN" ]; then
+              echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
+            fi
+
+            docker compose pull web
+            docker compose up -d
+            docker image prune -f
