@@ -22,7 +22,12 @@
         }
 	}
 
-
+	handle /v1/chat/completions {
+		reverse_proxy 127.0.0.1:8000 {
+			header_up X-Forwarded-For {http.request.header.X-Forwarded-For}
+			header_up X-Forwarded-Proto {vars.hscheme}
+        }
+	}
 
 	handle /* {
 

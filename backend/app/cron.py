@@ -33,6 +33,9 @@ def _update_token(chatgpt_username, chatgpt_token):
 
 def update_access_token():
     for line in ChatgptAccount.objects.all():
+        if line.is_relay_account:
+            continue
+
         try:
             at_info = jwt.decode(line.access_token, options={"verify_signature": False})
             if int(time.time()) < at_info["exp"] - 60 * 30 and line.auth_status:
@@ -59,6 +62,9 @@ def check_access_token():
 
     need_to_update = int(time.time() - 3600)
     for line in ChatgptAccount.objects.filter(updated_time__lte=need_to_update, auth_status=True).all():
+        if line.is_relay_account:
+            continue
+
         if line.access_token:
             if _update_token(line.chatgpt_username, line.access_token) is False:
                 line.auth_status = False

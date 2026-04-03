@@ -150,6 +150,24 @@ curl --location "${yourUrl}/v1/chat/completions" \
    }'
 ```
 
+管理后台现支持两种 API 账号来源：
+
+- ChatGPT Token：`Access Token`、`Session Token`、`Refresh Token`
+- 中转站 URL + Key：在管理后台录入兼容 OpenAI 格式的中转站地址和 API Key 后，仍然使用同一个 `/v1/chat/completions` 入口访问
+
+如果使用中转站方式，请在后台为用户复制对应的 `API Token`，并使用：
+
+```bash
+curl --location "${yourUrl}/v1/chat/completions" \
+--header 'Content-Type: application/json' \
+--header "Authorization: Bearer ${apiToken}" \
+--data '{
+     "model": "gpt-4o-mini",
+     "messages": [{"role": "user", "content": "你好呀!"}],
+     "stream": false
+   }'
+```
+
 更多 API 请点击查看：[高阶玩法](./docs/chatapi-gateway.md)
 
 ## FQA

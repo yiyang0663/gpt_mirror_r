@@ -29,14 +29,15 @@
                       :class="{ 'shiny-blue': item.plan_type !== 'free' }"
                       >{{ item.plan_type }}</t-tag
                     >
-                    <span>{{ item.chatgpt_flag }} </span>
+                    <span>{{ item.account_type === 'relay_api' ? 'API' : item.chatgpt_flag }} </span>
                   </div>
                 </div>
 
                 <div style="font-size: 12px; display: flex; justify-content: space-between">
                   <div>实时状态</div>
                   <div>
-                    <span v-if="item.auth_status === false"> 已过期 </span>
+                    <span v-if="item.account_type === 'relay_api'"> 仅 API 调用 </span>
+                    <span v-else-if="item.auth_status === false"> 已过期 </span>
                     <span v-else-if="getGPTUsePercent(item) < 40"> 空闲 </span>
                     <span v-else-if="getGPTUsePercent(item) < 80"> 忙碌 </span>
                     <span v-else> 繁忙 | 可用 </span>
@@ -113,6 +114,7 @@ interface TableData {
   chatgpt_flag: string;
   plan_type: string;
   auth_status: boolean;
+  account_type: string;
   use_count: any;
 }
 const tableData = ref<TableData[]>([]);

@@ -8,6 +8,7 @@ from app.accounts.models import User, VisitLog
 from app.accounts.serializers import ShowVisitLogModelSerializer, AddUserAccountSerializer, UserBindChatGPTSerializer, \
     ShowUserAccountModelSerializer, BatchModelLimitSerializer
 from app.chatgpt.models import ChatgptAccount
+from app.chatgpt.relay import build_relay_mirror_token
 from app.page import DefaultPageNumberPagination
 from app.settings import ADMIN_USERNAME
 from app.utils import req_gateway
@@ -19,19 +20,33 @@ class GetMirrorToken(APIView):
 
     def get(self, request):
         user = User.objects.filter(id=request.GET["user_id"]).first()
-
         user_gpt_list = ChatgptAccount.get_by_gptcar_list(user.gptcar_list)
-        chatgpt_username_list = [i.chatgpt_username for i in user_gpt_list]
-        res = req_gateway("post", "/api/get-mirror-token", json={
-            "isolated_session": user.isolated_session,
-            "limits": user.model_limit,
-            "chatgpt_list": chatgpt_username_list,
-            "user_name": user.username,
-        })
-        for line in res:
-            obj = ChatgptAccount.objects.filter(chatgpt_username=line["chatgpt_username"]).first()
-            line["auth_status"] = obj.auth_status
-            line["plan_type"] = obj.plan_type
+        gateway_account_list = [i for i in user_gpt_list if not i.is_relay_account]
+        relay_account_list = [i for i in user_gpt_list if i.is_relay_account]
+        res = []
+
+        if gateway_account_list:
+            chatgpt_username_list = [i.chatgpt_username for i in gateway_account_list]
+            res = req_gateway("post", "/api/get-mirror-token", json={
+                "isolated_session": user.isolated_session,
+                "limits": user.model_limit,
+                "chatgpt_list": chatgpt_username_list,
+                "user_name": user.username,
+            })
+            for line in res:
+                obj = ChatgptAccount.objects.filter(chatgpt_username=line["chatgpt_username"]).first()
+                line["auth_status"] = obj.auth_status
+                line["plan_type"] = obj.plan_type
+                line["account_type"] = obj.account_type
+
+        for account in relay_account_list:
+            res.append({
+                "chatgpt_username": account.chatgpt_username,
+                "mirror_token": build_relay_mirror_token(user.id, account.id),
+                "auth_status": account.auth_status,
+                "plan_type": account.plan_type,
+                "account_type": account.account_type,
+            })
         return Response(res)
 
 
@@ -41,7 +56,7 @@ class UserChatGPTAccountList(APIView):
     def get(self, request):
         results = []
         user_gpt_list = ChatgptAccount.get_by_gptcar_list(request.user.gptcar_list)
-        chatgpt_list = [i.chatgpt_username for i in user_gpt_list]
+        chatgpt_list = [i.chatgpt_username for i in user_gpt_list if not i.is_relay_account]
 
         try:
             use_count_dict = req_gateway("post", "/api/get-chatgpt-use-count", json={"chatgpt_list": chatgpt_list})
@@ -52,6 +67,17 @@ class UserChatGPTAccountList(APIView):
         current_minute = datetime.now().minute
 
         for line in auth_user_gpt_list or user_gpt_list:
+            if line.is_relay_account:
+                results.append({
+                    "id": line.id,
+                    "use_count": 0,
+                    "chatgpt_flag": "{:03}{}".format(line.id, line.chatgpt_username[:3]),
+                    "plan_type": line.plan_type,
+                    "auth_status": False,
+                    "account_type": line.account_type,
+                })
+                continue
+
             gpt_use_count_dict = use_count_dict.get(line.chatgpt_username, {}).get("gpt-4o", {})
             last_3h_use_count = (gpt_use_count_dict.get("last_1h", 0) +
                           gpt_use_count_dict.get("last_2h", 0) + gpt_use_count_dict.get("last_3h", 0) +
@@ -62,6 +88,7 @@ class UserChatGPTAccountList(APIView):
                 "chatgpt_flag": "{:03}{}".format(line.id, line.chatgpt_username[:3]),
                 "plan_type": line.plan_type,
                 "auth_status": line.auth_status,
+                "account_type": line.account_type,
             })
 
         return Response({"results": results})

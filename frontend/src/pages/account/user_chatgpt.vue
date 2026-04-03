@@ -12,8 +12,13 @@
       <t-tag v-if="row.auth_status === true" theme="success" variant="light"> 运行中 </t-tag>
     </template>
 
+    <template #account_type="{ row }">
+      <t-tag v-if="row.account_type === 'relay_api'" theme="warning" variant="light"> 中转站 </t-tag>
+      <t-tag v-else theme="primary" variant="light"> ChatGPT </t-tag>
+    </template>
+
     <template #op="slotProps">
-      <t-link theme="primary" @click="handleCopyUrl(slotProps.row.mirror_token)"> 复制</t-link>
+      <t-link theme="primary" @click="handleCopyToken(slotProps.row.mirror_token)"> 复制 Token</t-link>
     </template>
   </t-table>
 </template>
@@ -28,17 +33,19 @@ interface TableChatgptDetailsData {
   mirror_token: string;
   chatgpt_username: string;
   plan_type: string;
+  account_type: string;
 }
 
 const tableLoading = ref(false);
 const tableChatgptDetailsData = ref<TableChatgptDetailsData[]>([]);
 
 const columnsChatgptDetails: TableProps['columns'] = [
-  { colKey: 'chatgpt_username', title: 'ChatGPT', width: 80 },
-  { colKey: 'plan_type', title: '类型', width: 30 },
-  { colKey: 'auth_status', title: '状态', width: 30 },
-  { colKey: 'mirror_token', title: 'Mirror Token (用于 API, 该token不会变更)', width: 100 },
-  { colKey: 'op', title: '免登链接', width: 30 },
+  { colKey: 'chatgpt_username', title: '账号标识', width: 120 },
+  { colKey: 'account_type', title: '接入方式', width: 80 },
+  { colKey: 'plan_type', title: '类型', width: 50 },
+  { colKey: 'auth_status', title: '状态', width: 50 },
+  { colKey: 'mirror_token', title: 'API Token', width: 180 },
+  { colKey: 'op', title: '操作', width: 60 },
 ];
 
 const getChatGPTDetails = async (user: any) => {
@@ -51,9 +58,8 @@ const getChatGPTDetails = async (user: any) => {
   console.log(data);
 };
 
-const handleCopyUrl = (mirrorToken: string) => {
-  const notLoginUrl = `${window.location.origin}/api/not-login?user_gateway_token=${mirrorToken}`;
-  navigator.clipboard.writeText(notLoginUrl);
+const handleCopyToken = (mirrorToken: string) => {
+  navigator.clipboard.writeText(mirrorToken);
   MessagePlugin.success('复制成功');
 };
 

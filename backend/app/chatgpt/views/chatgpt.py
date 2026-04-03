@@ -7,7 +7,6 @@ from app.chatgpt.models import ChatgptAccount, ChatgptCar
 from app.chatgpt.serializers import ShowChatgptTokenSerializer, AddChatgptTokenSerializer, ChatGPTLoginSerializer, \
     UpdateChatgptInfoSerializer, DeleteChatgptAccountSerializer
 from app.page import DefaultPageNumberPagination
-from app.settings import CHATGPT_GATEWAY_URL
 from app.utils import save_visit_log, req_gateway, get_client_ip
 from app.accounts.models import User
 from rest_framework.exceptions import ValidationError
@@ -30,7 +29,7 @@ class ChatGPTAccountView(generics.ListCreateAPIView):
         pg = DefaultPageNumberPagination()
         pg.page_size_query_param = "page_size"
         page_accounts = pg.paginate_queryset(queryset, request=request)
-        chatgpt_list = [i.chatgpt_username for i in page_accounts]
+        chatgpt_list = [i.chatgpt_username for i in page_accounts if not i.is_relay_account]
 
         try:
             use_count_dict = req_gateway("post", "/api/get-chatgpt-use-count", json={"chatgpt_list": chatgpt_list})
@@ -43,9 +42,14 @@ class ChatGPTAccountView(generics.ListCreateAPIView):
         # 录入 chatgpt 账号
         serializer = AddChatgptTokenSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        for chatgpt_token in serializer.data["chatgpt_token_list"]:
-            if not chatgpt_token:
-                continue
+        if serializer.validated_data["account_type"] == ChatgptAccount.ACCOUNT_TYPE_RELAY:
+            try:
+                ChatgptAccount.save_relay_data(serializer.validated_data)
+            except ValueError as exc:
+                raise ValidationError({"message": str(exc)})
+            return Response({"message": "录入成功"})
+
+        for chatgpt_token in serializer.validated_data["chatgpt_token_list"]:
             res_json = req_gateway("post", "/api/get-user-info", json={"chatgpt_token": chatgpt_token})
             res_json["auth_status"] = True
             ChatgptAccount.save_data(res_json)
@@ -92,6 +96,9 @@ class ChatGPTLoginView(APIView):
             raise ValidationError("该账号不属于当前用户")
 
         chatgpt = ChatgptAccount.get_by_id(serializer.data["chatgpt_id"])
+        if chatgpt.is_relay_account:
+            raise ValidationError("中转站账号仅支持 API 调用，不支持网页登录")
+
         user_name = request.user.username + ip if request.user.username == "free_account" else request.user.username
         payload = {
             "user_name": user_name,
