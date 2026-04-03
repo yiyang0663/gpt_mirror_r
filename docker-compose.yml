@@ -8,7 +8,7 @@ x-defaults: &defaults
 
 services:
   web:
-    image: dairoot/chatgpt-mirror:latest
+    image: ghcr.io/yiyang0663/gpt_mirror_r:latest
     environment:
       - CHATGPT_GATEWAY_URL=http://gateway:8787
     ports:
