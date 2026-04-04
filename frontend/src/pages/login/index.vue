@@ -184,6 +184,7 @@ import { useRoute, useRouter } from 'vue-router';
 import LogoOpenai from '@/assets/openai-logo.svg';
 import { ChatgptTokenTutorialUrl } from '@/constants/index';
 import { useUserStore } from '@/store';
+import { redirectToConsumerChat } from '@/utils/direct-chat';
 
 type PanelMode = 'login' | 'register' | null;
 
@@ -330,7 +331,10 @@ const onSubmit: FormProps['onSubmit'] = async ({ validateResult, firstError }) =
     return;
   }
   if (data?.admin_token) {
-    router.push({ name: 'LoginChatgpt' });
+    const redirected = await redirectToConsumerChat();
+    if (!redirected) {
+      router.push({ name: 'LoginChatgpt' });
+    }
     return;
   }
 
@@ -347,7 +351,10 @@ const goFree = async () => {
   loading.value = true;
   const data = await userStore.login('/0x/user/login-free', {});
   if (data?.admin_token) {
-    router.push({ name: 'LoginChatgpt' });
+    const redirected = await redirectToConsumerChat();
+    if (!redirected) {
+      router.push({ name: 'LoginChatgpt' });
+    }
     return;
   }
 

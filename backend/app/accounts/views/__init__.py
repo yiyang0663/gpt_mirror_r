@@ -19,7 +19,17 @@ class GetMirrorToken(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request):
-        user = User.objects.filter(id=request.GET["user_id"]).first()
+        request_user_id = request.GET.get("user_id")
+        if request_user_id:
+            if request.user.username != ADMIN_USERNAME and str(request.user.id) != request_user_id:
+                raise ValidationError({"message": "无权查看其他用户的 Token"})
+            user = User.objects.filter(id=request_user_id).first()
+        else:
+            user = request.user
+
+        if not user:
+            raise ValidationError({"message": "用户不存在"})
+
         user_gpt_list = ChatgptAccount.get_by_gptcar_list(user.gptcar_list)
         gateway_account_list = [i for i in user_gpt_list if not i.is_relay_account]
         relay_account_list = [i for i in user_gpt_list if i.is_relay_account]
@@ -35,12 +45,14 @@ class GetMirrorToken(APIView):
             })
             for line in res:
                 obj = ChatgptAccount.objects.filter(chatgpt_username=line["chatgpt_username"]).first()
+                line["id"] = obj.id
                 line["auth_status"] = obj.auth_status
                 line["plan_type"] = obj.plan_type
                 line["account_type"] = obj.account_type
 
         for account in relay_account_list:
             res.append({
+                "id": account.id,
                 "chatgpt_username": account.chatgpt_username,
                 "mirror_token": build_relay_mirror_token(user.id, account.id),
                 "auth_status": account.auth_status,
