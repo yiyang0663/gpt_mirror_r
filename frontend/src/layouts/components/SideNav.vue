@@ -1,16 +1,35 @@
 <template>
   <div :class="sideNavCls">
-    <t-menu :class="menuCls" :theme="theme" :value="active" :collapsed="collapsed" :default-expanded="defaultExpanded">
-      <template #logo>
-        <span v-if="showLogo" :class="`${prefix}-side-nav-logo-wrapper`" @click="goHome">
-          <component :is="getLogo()" :class="logoCls" />
+    <div class="admin-side-panel" :class="{ 'is-collapsed': collapsed }">
+      <button class="admin-side-brand" type="button" @click="goHome">
+        <span class="admin-side-brand-mark">
+          <asset-logo class="admin-side-brand-icon" />
         </span>
-      </template>
-      <menu-content :nav-data="menu" />
-      <template #operations>
-        <span :class="versionCls"> {{ !collapsed ? 'ChatGPT Mirror' : '' }} </span>
-      </template>
-    </t-menu>
+        <span v-if="!collapsed" class="admin-side-brand-copy">
+          <strong>ChatGPT Mirror</strong>
+          <small>Admin Console</small>
+        </span>
+      </button>
+
+      <button class="admin-side-primary" type="button" @click="goPortal">
+        <t-icon name="browse" />
+        <span v-if="!collapsed">打开用户端</span>
+      </button>
+
+      <div v-if="!collapsed" class="admin-side-section">Workspace</div>
+
+      <t-menu class="admin-side-menu" :theme="theme" :value="active" :collapsed="collapsed" :default-expanded="defaultExpanded">
+        <menu-content :nav-data="menu" />
+      </t-menu>
+
+      <div class="admin-side-footer">
+        <div class="admin-side-status">
+          <span class="admin-side-status-dot"></span>
+          <span v-if="!collapsed">Docker · Auto Deploy</span>
+        </div>
+        <p v-if="!collapsed" class="admin-side-caption">账号、号池和系统日志都在同一个工作区里维护。</p>
+      </div>
+    </div>
     <div :class="`${prefix}-side-nav-placeholder${collapsed ? '-hidden' : ''}`"></div>
   </div>
 </template>
@@ -18,11 +37,10 @@
 <script setup lang="ts">
 import union from 'lodash/union';
 import type { PropType } from 'vue';
-import { computed, onMounted } from 'vue';
+import { computed, onBeforeUnmount, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 
 import AssetLogo from '@/assets/openai-logo.svg?component';
-import AssetLogoFull from '@/assets/openai-logo-full.svg?component';
 import { prefix } from '@/config/global';
 import { getActive, getRoutesExpanded } from '@/router';
 import { useSettingStore } from '@/store';
@@ -32,7 +50,7 @@ import MenuContent from './MenuContent.vue';
 
 const MIN_POINT = 992 - 1;
 
-const props = defineProps({
+defineProps({
   menu: {
     type: Array as PropType<MenuRoute[]>,
     default: () => [],
@@ -64,7 +82,6 @@ const props = defineProps({
 });
 
 const collapsed = computed(() => useSettingStore().isSidebarCompact);
-
 const active = computed(() => getActive());
 
 const defaultExpanded = computed(() => {
@@ -74,48 +91,10 @@ const defaultExpanded = computed(() => {
   return union(expanded, parentPath === '' ? [] : [parentPath]);
 });
 
-const sideMode = computed(() => {
-  const { theme } = props;
-  return theme === 'dark';
-});
-const sideNavCls = computed(() => {
-  const { isCompact } = props;
-  return [
-    `${prefix}-sidebar-layout`,
-    {
-      [`${prefix}-sidebar-compact`]: isCompact,
-    },
-  ];
-});
-const logoCls = computed(() => {
-  return [
-    `${prefix}-side-nav-logo-${collapsed.value ? 't' : 'tdesign'}-logo`,
-    {
-      [`${prefix}-side-nav-dark`]: sideMode.value,
-    },
-  ];
-});
-const versionCls = computed(() => {
-  return [
-    `version-container`,
-    {
-      [`${prefix}-side-nav-dark`]: sideMode.value,
-    },
-  ];
-});
-const menuCls = computed(() => {
-  const { showLogo, isFixed, layout } = props;
-  return [
-    `${prefix}-side-nav`,
-    {
-      [`${prefix}-side-nav-no-logo`]: !showLogo,
-      [`${prefix}-side-nav-no-fixed`]: !isFixed,
-      [`${prefix}-side-nav-mix-fixed`]: layout === 'mix' && isFixed,
-    },
-  ];
-});
+const sideNavCls = computed(() => [`${prefix}-sidebar-layout`]);
 
 const settingStore = useSettingStore();
+const router = useRouter();
 
 const autoCollapsed = () => {
   const isCompact = window.innerWidth <= MIN_POINT;
@@ -124,21 +103,247 @@ const autoCollapsed = () => {
   });
 };
 
+const handleResize = () => {
+  autoCollapsed();
+};
+
 onMounted(() => {
   autoCollapsed();
-  window.onresize = () => {
-    autoCollapsed();
-  };
+  window.addEventListener('resize', handleResize);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize);
 });
 
 const goHome = () => {
-  window.location.href = '/admin/#/login-chatgpt';
+  router.push('/account/chatgpt');
 };
 
-const getLogo = () => {
-  if (collapsed.value) return AssetLogo;
-  return AssetLogoFull;
+const goPortal = () => {
+  window.open('/', '_blank', 'noopener,noreferrer');
 };
 </script>
 
-<style lang="less" scoped></style>
+<style lang="less" scoped>
+.admin-side-panel {
+  position: fixed;
+  inset: 14px auto 14px 14px;
+  display: flex;
+  flex-direction: column;
+  width: 252px;
+  padding: 12px;
+  border: 1px solid rgba(17, 17, 17, 0.06);
+  border-radius: 28px;
+  background: rgba(245, 245, 242, 0.88);
+  box-shadow: 0 20px 50px rgba(17, 17, 17, 0.06);
+  backdrop-filter: blur(14px);
+}
+
+.admin-side-panel.is-collapsed {
+  width: 76px;
+  align-items: center;
+}
+
+.admin-side-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px 12px;
+  border: none;
+  background: transparent;
+  color: #161616;
+  cursor: pointer;
+  text-align: left;
+}
+
+.admin-side-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.admin-side-brand-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.admin-side-brand-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.admin-side-brand-copy strong {
+  color: #151515;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.admin-side-brand-copy small {
+  color: #7c7c78;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.admin-side-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  margin: 4px 0 16px;
+  padding: 0 14px;
+  border: 1px solid rgba(17, 17, 17, 0.08);
+  border-radius: 999px;
+  background: #fff;
+  box-shadow:
+    0 10px 30px rgba(17, 17, 17, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  color: #171717;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.admin-side-primary:hover {
+  transform: translateY(-1px);
+  border-color: rgba(17, 17, 17, 0.14);
+  box-shadow: 0 16px 36px rgba(17, 17, 17, 0.08);
+}
+
+.admin-side-panel.is-collapsed .admin-side-primary {
+  width: 48px;
+  padding: 0;
+}
+
+.admin-side-section {
+  margin: 0 10px 8px;
+  color: #858580;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-side-menu {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.admin-side-menu:deep(.t-default-menu__inner) {
+  background: transparent;
+}
+
+.admin-side-menu:deep(.t-menu__operations) {
+  display: none;
+}
+
+.admin-side-menu:deep(.t-menu__item),
+.admin-side-menu:deep(.t-submenu__title) {
+  height: auto;
+  margin: 2px 0;
+  padding: 12px 12px 12px 14px;
+  border-radius: 16px;
+  color: #232323;
+  font-size: 14px;
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease;
+}
+
+.admin-side-menu:deep(.t-menu__item:hover),
+.admin-side-menu:deep(.t-submenu__title:hover) {
+  background: rgba(17, 17, 17, 0.05);
+}
+
+.admin-side-menu:deep(.t-menu__item .t-icon),
+.admin-side-menu:deep(.t-submenu__title .t-icon) {
+  margin-right: 12px;
+  color: #666;
+}
+
+.admin-side-menu:deep(.t-is-active:not(.t-is-opened)),
+.admin-side-menu:deep(.t-is-active > .t-submenu__title) {
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    inset 0 0 0 1px rgba(17, 17, 17, 0.06),
+    0 12px 30px rgba(17, 17, 17, 0.05);
+  color: #111;
+}
+
+.admin-side-menu:deep(.t-is-active .t-icon) {
+  color: #10a37f;
+}
+
+.admin-side-menu:deep(.t-submenu__content) {
+  margin-left: 16px;
+  padding-left: 10px;
+  border-left: 1px solid rgba(17, 17, 17, 0.08);
+}
+
+.admin-side-panel.is-collapsed .admin-side-menu:deep(.t-menu__item),
+.admin-side-panel.is-collapsed .admin-side-menu:deep(.t-submenu__title) {
+  justify-content: center;
+  padding: 12px 0;
+}
+
+.admin-side-panel.is-collapsed .admin-side-menu:deep(.t-menu__item .t-icon),
+.admin-side-panel.is-collapsed .admin-side-menu:deep(.t-submenu__title .t-icon) {
+  margin-right: 0;
+}
+
+.admin-side-footer {
+  padding: 14px 8px 4px;
+}
+
+.admin-side-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #3a3a37;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.admin-side-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #10a37f;
+  box-shadow: 0 0 0 5px rgba(16, 163, 127, 0.12);
+}
+
+.admin-side-caption {
+  margin: 12px 4px 0;
+  color: #7a7a75;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 991px) {
+  .admin-side-panel {
+    inset: 12px auto 12px 12px;
+  }
+}
+</style>

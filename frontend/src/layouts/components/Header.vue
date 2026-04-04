@@ -1,98 +1,70 @@
 <template>
   <div :class="layoutCls">
-    <t-head-menu :class="menuCls" :theme="menuTheme" expand-type="popup" :value="active">
-      <template #logo>
-        <span v-if="showLogo" class="header-logo-container" @click="handleNav('/')">
-          <logo-full class="t-logo" />
-        </span>
-        <div v-else class="header-operate-left">
-          <t-button theme="default" shape="square" variant="text" @click="changeCollapsed">
+    <div :class="menuCls">
+      <div class="admin-header-shell">
+        <div class="admin-header-leading">
+          <t-button class="admin-header-toggle" theme="default" shape="square" variant="text" @click="changeCollapsed">
             <t-icon class="collapsed-icon" name="view-list" />
           </t-button>
-          <!-- <search :layout="layout" /> -->
-        </div>
-      </template>
-      <!-- <template v-if="layout !== 'side'" #default>
-        <menu-content class="header-menu" :nav-data="menu" />
-      </template> -->
-      <template #operations>
-        <div class="operations-container">
-          <!-- 搜索框 -->
-          <!-- <search v-if="layout !== 'side'" :layout="layout" /> -->
 
-          <!-- 全局通知 -->
+          <div class="admin-header-copy">
+            <p class="admin-header-section">{{ sectionTitle }}</p>
+            <button class="admin-header-title" type="button" @click="handleNav(homePath)">
+              {{ currentTitle }}
+            </button>
+          </div>
+        </div>
+
+        <div class="admin-header-actions">
+          <button class="admin-header-link" type="button" @click="goPortal">用户端</button>
+
           <notice />
 
           <t-tooltip placement="bottom" :content="$t('layout.header.code')">
-            <t-button theme="default" shape="square" variant="text" @click="navToGitHub">
+            <t-button class="admin-header-icon-btn" theme="default" shape="square" variant="text" @click="navToGitHub">
               <t-icon name="logo-github" />
             </t-button>
           </t-tooltip>
-          <!-- <t-tooltip placement="bottom" :content="$t('layout.header.help')">
-            <t-button theme="default" shape="square" variant="text" @click="navToHelper">
-              <t-icon name="help-circle" />
-            </t-button>
-          </t-tooltip> -->
-          <!-- <t-dropdown trigger="click">
-            <t-button theme="default" shape="square" variant="text">
-              <translate-icon />
-            </t-button>
-            <t-dropdown-menu>
-              <t-dropdown-item
-                v-for="(lang, index) in langList"
-                :key="index"
-                :value="lang.value"
-                @click="(options) => changeLang(options.value as string)"
-                >{{ lang.content }}</t-dropdown-item
-              ></t-dropdown-menu
-            >
-          </t-dropdown> -->
-          <t-dropdown :min-column-width="120" trigger="click">
+
+          <t-dropdown :min-column-width="160" trigger="click">
             <template #dropdown>
               <t-dropdown-menu>
                 <t-dropdown-item class="operations-dropdown-container-item" @click="handleLogout">
-                  <poweroff-icon />{{ $t('layout.header.signOut') }}
+                  <poweroff-icon />
+                  {{ $t('layout.header.signOut') }}
                 </t-dropdown-item>
               </t-dropdown-menu>
             </template>
             <t-button class="header-user-btn" theme="default" variant="text">
-              <template #icon>
-                <t-icon class="header-user-avatar" name="user-circle" />
-              </template>
-              <div class="header-user-account">{{ user.userInfo.name }}</div>
+              <span class="header-user-badge">{{ userInitial }}</span>
+              <div class="header-user-meta">
+                <span class="header-user-label">{{ displayName }}</span>
+                <small class="header-user-role">Admin</small>
+              </div>
               <template #suffix><chevron-down-icon /></template>
             </t-button>
           </t-dropdown>
-          <!-- <t-tooltip placement="bottom" :content="$t('layout.header.setting')">
-            <t-button theme="default" shape="square" variant="text" @click="toggleSettingPanel">
-              <setting-icon />
-            </t-button>
-          </t-tooltip> -->
         </div>
-      </template>
-    </t-head-menu>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ChevronDownIcon, PoweroffIcon, SettingIcon, TranslateIcon, UserCircleIcon } from 'tdesign-icons-vue-next';
+import Cookies from 'js-cookie';
+import { ChevronDownIcon, PoweroffIcon } from 'tdesign-icons-vue-next';
 import type { PropType } from 'vue';
 import { computed } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
-import LogoFull from '@/assets/openai-logo-full.svg?component';
 import { prefix } from '@/config/global';
-// import { langList } from '@/locales/index';
-// import { useLocale } from '@/locales/useLocale';
-import { getActive } from '@/router';
+import { useLocale } from '@/locales/useLocale';
 import { useSettingStore, useUserStore } from '@/store';
-import type { MenuRoute, ModeType } from '@/types/interface';
+import type { MenuRoute } from '@/types/interface';
 
-// import MenuContent from './MenuContent.vue';
 import Notice from './Notice.vue';
-// import Search from './Search.vue';
 
-const props = defineProps({
+defineProps({
   theme: {
     type: String,
     default: 'light',
@@ -124,37 +96,34 @@ const props = defineProps({
 });
 
 const router = useRouter();
+const route = useRoute();
 const settingStore = useSettingStore();
 const user = useUserStore();
-
-const toggleSettingPanel = () => {
-  settingStore.updateConfig({
-    showSettingPanel: true,
-  });
-};
-
-const active = computed(() => getActive());
+const { locale } = useLocale();
 
 const layoutCls = computed(() => [`${prefix}-header-layout`]);
+const menuCls = computed(() => ['admin-header-menu']);
 
-const menuCls = computed(() => {
-  const { isFixed, layout, isCompact } = props;
-  return [
-    {
-      [`${prefix}-header-menu`]: !isFixed,
-      [`${prefix}-header-menu-fixed`]: isFixed,
-      [`${prefix}-header-menu-fixed-side`]: layout === 'side' && isFixed,
-      [`${prefix}-header-menu-fixed-side-compact`]: layout === 'side' && isFixed && isCompact,
-    },
-  ];
+const renderTitle = (title?: string | Record<string, string>) => {
+  if (!title) return '管理中心';
+  if (typeof title === 'string') return title;
+  return title[locale.value] || title.zh_CN || title.en_US;
+};
+
+const parentRoute = computed(() => {
+  if (route.matched.length <= 1) return null;
+  return route.matched[route.matched.length - 2];
 });
-const menuTheme = computed(() => props.theme as ModeType);
 
-// 切换语言
-// const { changeLocale } = useLocale();
-// const changeLang = (lang: string) => {
-//   changeLocale(lang);
-// };
+const currentTitle = computed(() => renderTitle(route.meta.title as string | Record<string, string> | undefined));
+const sectionTitle = computed(() => renderTitle(parentRoute.value?.meta?.title as string | Record<string, string> | undefined));
+const homePath = computed(() => {
+  const redirect = parentRoute.value?.redirect;
+  if (typeof redirect === 'string') return redirect;
+  return parentRoute.value?.path || '/account/chatgpt';
+});
+const displayName = computed(() => user.userInfo.name || 'Administrator');
+const userInitial = computed(() => displayName.value.trim().charAt(0).toUpperCase() || 'A');
 
 const changeCollapsed = () => {
   settingStore.updateConfig({
@@ -166,158 +135,204 @@ const handleNav = (url: string) => {
   router.push(url);
 };
 
-const handleLogout = () => {
+const handleLogout = async () => {
+  await user.logout();
+  Cookies.remove('user_token');
   router.push({
     path: '/login',
     query: { redirect: encodeURIComponent(router.currentRoute.value.fullPath) },
   });
 };
 
+const goPortal = () => {
+  window.open('/', '_blank', 'noopener,noreferrer');
+};
+
 const navToGitHub = () => {
   window.open('https://github.com/dairoot/ChatGPT-Mirror');
 };
 </script>
+
 <style lang="less" scoped>
-.@{starter-prefix}-header {
-  &-menu-fixed {
-    position: fixed;
-    top: 0;
-    z-index: 1001;
-
-    :deep(.t-head-menu__inner) {
-      padding-right: var(--td-comp-margin-xl);
-    }
-
-    &-side {
-      left: 232px;
-      right: 0;
-      z-index: 10;
-      width: auto;
-      transition: all 0.3s;
-
-      &-compact {
-        left: 64px;
-      }
-    }
-  }
-
-  &-logo-container {
-    cursor: pointer;
-    display: inline-flex;
-  }
+.admin-header-menu {
+  padding: 14px 28px 0 18px;
 }
 
-.header-menu {
-  flex: 1 1 1;
+.admin-header-shell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 74px;
+  padding: 16px 20px;
+  border: 1px solid rgba(17, 17, 17, 0.06);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow:
+    0 18px 48px rgba(17, 17, 17, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(14px);
+}
+
+.admin-header-leading,
+.admin-header-actions {
+  display: flex;
+  align-items: center;
+}
+
+.admin-header-leading {
+  gap: 12px;
+  min-width: 0;
+}
+
+.admin-header-actions {
+  gap: 10px;
+}
+
+.admin-header-toggle,
+.admin-header-icon-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  background: rgba(17, 17, 17, 0.04);
+  color: #303030;
+}
+
+.admin-header-copy {
+  min-width: 0;
+}
+
+.admin-header-section {
+  margin: 0 0 4px;
+  color: #7d7d79;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-header-title {
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #171717;
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 700;
+  line-height: 1.05;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-header-link {
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid rgba(17, 17, 17, 0.08);
+  border-radius: 999px;
+  background: #fff;
+  color: #181818;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.header-user-btn {
+  min-height: 48px;
+  padding: 4px 12px 4px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(17, 17, 17, 0.05);
+}
+
+.header-user-badge {
   display: inline-flex;
-
-  :deep(.t-menu__item) {
-    min-width: unset;
-  }
-}
-
-.operations-container {
-  display: flex;
   align-items: center;
-
-  .t-popup__reference {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .t-button {
-    margin-left: var(--td-comp-margin-l);
-  }
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-right: 10px;
+  border-radius: 999px;
+  background: #171717;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
 }
 
-.header-operate-left {
+.header-user-meta {
   display: flex;
-  align-items: normal;
-  line-height: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
 }
 
-.header-logo-container {
-  width: 184px;
-  height: 26px;
-  display: flex;
-  margin-left: 24px;
-  color: var(--td-text-color-primary);
-
-  .t-logo {
-    width: 100%;
-    height: 100%;
-
-    &:hover {
-      cursor: pointer;
-    }
-  }
-
-  &:hover {
-    cursor: pointer;
-  }
+.header-user-label {
+  color: #181818;
+  font-size: 14px;
+  font-weight: 600;
 }
 
-.header-user-account {
+.header-user-role {
+  color: #8a8a85;
+  font-size: 11px;
+}
+
+.admin-header-actions :deep(.t-popup__reference) {
   display: inline-flex;
   align-items: center;
-  color: var(--td-text-color-primary);
 }
 
-:deep(.t-head-menu__inner) {
-  border-bottom: 1px solid var(--td-component-stroke);
+.admin-header-actions :deep(.t-button + .t-button) {
+  margin-left: 0;
 }
 
-.t-menu--light {
-  .header-user-account {
-    color: var(--td-text-color-primary);
+.admin-header-actions :deep(.t-button__suffix) {
+  margin-left: 8px;
+  color: #767671;
+}
+
+.admin-header-actions :deep(.t-button) {
+  border: none;
+}
+
+@media (max-width: 991px) {
+  .admin-header-menu {
+    padding: 12px 16px 0 12px;
+  }
+
+  .admin-header-shell {
+    padding: 14px 16px;
+  }
+
+  .admin-header-link {
+    display: none;
+  }
+
+  .header-user-role {
+    display: none;
   }
 }
 
-.t-menu--dark {
-  .t-head-menu__inner {
-    border-bottom: 1px solid var(--td-gray-color-10);
+@media (max-width: 720px) {
+  .admin-header-shell {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .header-user-account {
-    color: rgb(255 255 255 / 55%);
-  }
-}
-
-.operations-dropdown-container-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-
-  :deep(.t-dropdown__item-text) {
-    display: flex;
-    align-items: center;
+  .admin-header-actions {
+    justify-content: space-between;
   }
 
-  .t-icon {
-    font-size: var(--td-comp-size-xxxs);
-    margin-right: var(--td-comp-margin-s);
+  .header-user-btn {
+    min-width: 0;
   }
 
-  :deep(.t-dropdown__item) {
-    width: 100%;
-    margin-bottom: 0;
-  }
-
-  &:last-child {
-    :deep(.t-dropdown__item) {
-      margin-bottom: 8px;
-    }
-  }
-}
-</style>
-
-<!-- eslint-disable-next-line vue-scoped-css/enforce-style-type -->
-<style lang="less">
-.operations-dropdown-container-item {
-  .t-dropdown__item-text {
-    display: flex;
-    align-items: center;
+  .header-user-label {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 </style>

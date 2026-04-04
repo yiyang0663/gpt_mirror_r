@@ -61,8 +61,34 @@
       </t-tab-panel>
     </t-tabs>
     <t-content :class="`${prefix}-content-layout`">
-      <l-breadcrumb v-if="settingStore.showBreadcrumb" />
-      <l-content />
+      <div class="admin-workspace">
+        <section class="workspace-hero">
+          <div class="workspace-copy">
+            <p class="workspace-eyebrow">{{ sectionTitle }}</p>
+            <h1 class="workspace-title">{{ currentTitle }}</h1>
+            <p class="workspace-description">{{ currentDescription }}</p>
+          </div>
+
+          <div class="workspace-shortcuts">
+            <button
+              v-for="shortcut in workspaceShortcuts"
+              :key="shortcut.path"
+              class="workspace-shortcut"
+              :class="{ active: isShortcutActive(shortcut.path) }"
+              type="button"
+              @click="handleJump(shortcut.path)"
+            >
+              <span class="workspace-shortcut-kicker">{{ shortcut.kicker }}</span>
+              <span class="workspace-shortcut-name">{{ shortcut.label }}</span>
+            </button>
+          </div>
+        </section>
+
+        <div class="workspace-body">
+          <l-breadcrumb v-if="settingStore.showBreadcrumb" />
+          <l-content />
+        </div>
+      </div>
     </t-content>
     <t-footer v-if="settingStore.showFooter" :class="`${prefix}-footer-layout`">
       <l-footer />
@@ -94,6 +120,37 @@ const activeTabPath = ref('');
 
 const { locale } = useLocale();
 
+const workspaceShortcuts = [
+  { path: '/account/user', label: '用户', kicker: 'Accounts' },
+  { path: '/account/chatgpt', label: 'ChatGPT', kicker: 'Tokens' },
+  { path: '/account/gptcar', label: '号池', kicker: 'Pools' },
+  { path: '/system/login-log', label: '登录日志', kicker: 'Audit' },
+];
+
+const workspaceDescriptions: Record<string, string> = {
+  '/account/user': '管理登录账户、有效期、模型限制与独立会话策略。',
+  '/account/chatgpt': '维护 ChatGPT Token 与中转站凭据，快速判断当前可用状态。',
+  '/account/gptcar': '整理号池资源和绑定关系，让分配边界保持清晰。',
+  '/system/login-log': '核对最近的登录记录与异常访问，便于排查问题。',
+};
+
+const renderTitle = (title?: string | Record<string, string>) => {
+  if (!title) return '管理中心';
+  if (typeof title === 'string') return title;
+  return title[locale.value] || title.zh_CN || title.en_US;
+};
+
+const parentRoute = computed(() => {
+  if (route.matched.length <= 1) return null;
+  return route.matched[route.matched.length - 2];
+});
+
+const currentTitle = computed(() => renderTitle(route.meta.title as string | Record<string, string> | undefined));
+const sectionTitle = computed(() => renderTitle(parentRoute.value?.meta?.title as string | Record<string, string> | undefined));
+const currentDescription = computed(
+  () => workspaceDescriptions[route.path] || '统一维护后台账号、号池和系统状态。',
+);
+
 const handleChangeCurrentTab = (path: string) => {
   const { tabRouters } = tabsRouterStore;
   const route = tabRouters.find((i) => i.path === path);
@@ -108,10 +165,6 @@ const handleRemove = (options: TTabRemoveOptions) => {
   if ((options.value as string) === route.path) router.push({ path: nextRouter.path, query: nextRouter.query });
 };
 
-const renderTitle = (title: string | Record<string, string>) => {
-  if (typeof title === 'string') return title;
-  return title[locale.value];
-};
 const handleRefresh = (route: TRouterInfo, routeIdx: number) => {
   tabsRouterStore.toggleTabRouterAlive(routeIdx);
   nextTick(() => {
@@ -120,30 +173,30 @@ const handleRefresh = (route: TRouterInfo, routeIdx: number) => {
   });
   activeTabPath.value = null;
 };
+
 const handleCloseAhead = (path: string, routeIdx: number) => {
   tabsRouterStore.subtractTabRouterAhead({ path, routeIdx });
 
   handleOperationEffect('ahead', routeIdx);
 };
+
 const handleCloseBehind = (path: string, routeIdx: number) => {
   tabsRouterStore.subtractTabRouterBehind({ path, routeIdx });
 
   handleOperationEffect('behind', routeIdx);
 };
+
 const handleCloseOther = (path: string, routeIdx: number) => {
   tabsRouterStore.subtractTabRouterOther({ path, routeIdx });
 
   handleOperationEffect('other', routeIdx);
 };
 
-// 处理非当前路由操作的副作用
 const handleOperationEffect = (type: 'other' | 'ahead' | 'behind', routeIndex: number) => {
   const currentPath = router.currentRoute.value.path;
   const { tabRouters } = tabsRouterStore;
 
   const currentIdx = tabRouters.findIndex((i) => i.path === currentPath);
-  // 存在三种情况需要刷新当前路由
-  // 点击非当前路由的关闭其他、点击非当前路由的关闭左侧且当前路由小于触发路由、点击非当前路由的关闭右侧且当前路由大于触发路由
   const needRefreshRouter =
     (type === 'other' && currentIdx !== routeIndex) ||
     (type === 'ahead' && currentIdx < routeIndex) ||
@@ -156,6 +209,7 @@ const handleOperationEffect = (type: 'other' | 'ahead' | 'behind', routeIndex: n
 
   activeTabPath.value = null;
 };
+
 const handleTabMenuClick = (visible: boolean, ctx: PopupVisibleChangeContext, path: string) => {
   if (ctx.trigger === 'document') activeTabPath.value = null;
   if (visible) activeTabPath.value = path;
@@ -169,4 +223,131 @@ const handleDragend = (options: { currentIndex: number; targetIndex: number }) =
     tabRouters[options.currentIndex],
   ];
 };
+
+const handleJump = (path: string) => {
+  if (route.path === path) return;
+  router.push(path);
+};
+
+const isShortcutActive = (path: string) => route.path === path;
 </script>
+
+<style lang="less" scoped>
+.admin-workspace {
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+.workspace-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+  gap: 18px;
+  align-items: end;
+  padding: 4px 0 28px;
+}
+
+.workspace-copy {
+  padding: 18px 4px 0;
+}
+
+.workspace-eyebrow {
+  margin: 0 0 12px;
+  color: #7f7f7a;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workspace-title {
+  margin: 0;
+  color: #181818;
+  font-size: clamp(34px, 4.6vw, 54px);
+  font-weight: 700;
+  line-height: 1.02;
+}
+
+.workspace-description {
+  max-width: 560px;
+  margin: 16px 0 0;
+  color: #6b6b67;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.workspace-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workspace-shortcut {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 108px;
+  padding: 18px;
+  border: 1px solid rgba(17, 17, 17, 0.06);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow:
+    0 18px 44px rgba(17, 17, 17, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  color: #1a1a1a;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.workspace-shortcut:hover {
+  transform: translateY(-1px);
+  border-color: rgba(17, 17, 17, 0.12);
+  box-shadow: 0 20px 48px rgba(17, 17, 17, 0.07);
+}
+
+.workspace-shortcut.active {
+  border-color: rgba(16, 163, 127, 0.18);
+  box-shadow:
+    0 20px 48px rgba(17, 17, 17, 0.06),
+    inset 0 0 0 1px rgba(16, 163, 127, 0.14);
+}
+
+.workspace-shortcut-kicker {
+  color: #8c8c87;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workspace-shortcut-name {
+  color: #161616;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.workspace-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (max-width: 1080px) {
+  .workspace-hero {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .workspace-shortcuts {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-shortcut {
+    min-height: 92px;
+  }
+}
+</style>
