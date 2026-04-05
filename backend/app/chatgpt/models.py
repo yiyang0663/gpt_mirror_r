@@ -259,6 +259,12 @@ class UsageLedger(models.Model):
     error_code = models.CharField(max_length=128, blank=True, verbose_name="错误码")
     created_at = models.IntegerField(db_index=True, blank=True, verbose_name="创建时间")
 
+    @classmethod
+    def save_data(cls, data):
+        payload = dict(data)
+        payload.setdefault("created_at", int(time.time()))
+        return cls.objects.create(**payload)
+
 
 class ChatConversation(models.Model):
     user = models.ForeignKey(
@@ -302,9 +308,3 @@ class ChatConversationMessage(models.Model):
 
     class Meta:
         ordering = ("sequence", "id")
-
-    @classmethod
-    def save_data(cls, data):
-        payload = dict(data)
-        payload.setdefault("created_at", int(time.time()))
-        return cls.objects.create(**payload)

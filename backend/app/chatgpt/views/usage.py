@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, DecimalField, Q, Sum, Value
 from django.db.models.functions import Coalesce
 from rest_framework import generics
 from rest_framework.exceptions import ValidationError
@@ -65,7 +65,10 @@ def build_usage_summary(queryset):
         prompt_tokens=Coalesce(Sum("prompt_tokens"), 0),
         completion_tokens=Coalesce(Sum("completion_tokens"), 0),
         total_tokens=Coalesce(Sum("total_tokens"), 0),
-        estimated_cost=Coalesce(Sum("estimated_cost"), 0),
+        estimated_cost=Coalesce(
+            Sum("estimated_cost"),
+            Value(0, output_field=DecimalField(max_digits=12, decimal_places=6)),
+        ),
     )
     summary["estimated_cost"] = float(summary["estimated_cost"] or 0)
     summary["unique_users"] = queryset.exclude(user_id=None).values("user_id").distinct().count()
