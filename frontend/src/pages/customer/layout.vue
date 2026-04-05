@@ -95,7 +95,12 @@ const navItems = [
 ];
 
 const openChat = async () => {
-  await router.push({ name: 'CustomerChat' });
+  await router.push({
+    name: 'CustomerChat',
+    query: {
+      new: String(Date.now()),
+    },
+  });
 };
 
 const pageMeta = computed(() => {

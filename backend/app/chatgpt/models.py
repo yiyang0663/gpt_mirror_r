@@ -259,6 +259,50 @@ class UsageLedger(models.Model):
     error_code = models.CharField(max_length=128, blank=True, verbose_name="错误码")
     created_at = models.IntegerField(db_index=True, blank=True, verbose_name="创建时间")
 
+
+class ChatConversation(models.Model):
+    user = models.ForeignKey(
+        "accounts.User",
+        related_name="chat_conversations",
+        on_delete=models.CASCADE,
+    )
+    title = models.CharField(max_length=160, default="新对话", verbose_name="会话标题")
+    model_name = models.CharField(max_length=128, blank=True, verbose_name="默认模型")
+    preview_text = models.TextField(blank=True, verbose_name="预览内容")
+    message_count = models.PositiveIntegerField(default=0, verbose_name="消息数量")
+    last_message_at = models.IntegerField(default=0, db_index=True, verbose_name="最后消息时间")
+    created_time = models.IntegerField(db_index=True, blank=True, verbose_name="创建时间")
+    updated_time = models.IntegerField(db_index=True, blank=True, verbose_name="更新时间")
+
+    class Meta:
+        ordering = ("-updated_time", "-id")
+
+
+class ChatConversationMessage(models.Model):
+    ROLE_USER = "user"
+    ROLE_ASSISTANT = "assistant"
+    ROLE_SYSTEM = "system"
+    ROLE_CHOICES = (
+        (ROLE_USER, "用户"),
+        (ROLE_ASSISTANT, "助手"),
+        (ROLE_SYSTEM, "系统"),
+    )
+
+    conversation = models.ForeignKey(
+        ChatConversation,
+        related_name="messages",
+        on_delete=models.CASCADE,
+    )
+    role = models.CharField(max_length=16, choices=ROLE_CHOICES, verbose_name="消息角色")
+    content = models.TextField(blank=True, verbose_name="消息内容")
+    account_label = models.CharField(max_length=128, blank=True, verbose_name="通道标签")
+    sequence = models.PositiveIntegerField(default=0, db_index=True, verbose_name="排序序号")
+    created_time = models.IntegerField(db_index=True, blank=True, verbose_name="创建时间")
+    updated_time = models.IntegerField(db_index=True, blank=True, verbose_name="更新时间")
+
+    class Meta:
+        ordering = ("sequence", "id")
+
     @classmethod
     def save_data(cls, data):
         payload = dict(data)

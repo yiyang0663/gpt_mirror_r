@@ -1,6 +1,12 @@
 from rest_framework import serializers
 
-from app.chatgpt.models import ChatgptAccount, ChatgptCar, UsageLedger
+from app.chatgpt.models import (
+    ChatConversation,
+    ChatConversationMessage,
+    ChatgptAccount,
+    ChatgptCar,
+    UsageLedger,
+)
 import jwt
 from app.utils import clean_int_list
 import time
@@ -204,3 +210,62 @@ class ShowUsageLedgerSerializer(serializers.ModelSerializer):
             "error_code",
             "created_at",
         )
+
+
+class ShowChatConversationMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChatConversationMessage
+        fields = (
+            "id",
+            "role",
+            "content",
+            "account_label",
+            "sequence",
+            "created_time",
+            "updated_time",
+        )
+
+
+class ShowChatConversationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChatConversation
+        fields = (
+            "id",
+            "title",
+            "model_name",
+            "preview_text",
+            "message_count",
+            "last_message_at",
+            "created_time",
+            "updated_time",
+        )
+
+
+class ShowChatConversationDetailSerializer(ShowChatConversationSerializer):
+    messages = ShowChatConversationMessageSerializer(many=True, read_only=True)
+
+    class Meta(ShowChatConversationSerializer.Meta):
+        fields = ShowChatConversationSerializer.Meta.fields + ("messages",)
+
+
+class CreateChatConversationSerializer(serializers.Serializer):
+    title = serializers.CharField(required=False, allow_blank=True, default="")
+    model_name = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class SyncChatConversationMessageSerializer(serializers.Serializer):
+    role = serializers.ChoiceField(
+        choices=[
+            ChatConversationMessage.ROLE_USER,
+            ChatConversationMessage.ROLE_ASSISTANT,
+            ChatConversationMessage.ROLE_SYSTEM,
+        ]
+    )
+    content = serializers.CharField(required=False, allow_blank=True, default="")
+    account_label = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class SyncChatConversationSerializer(serializers.Serializer):
+    title = serializers.CharField(required=False, allow_blank=True, default="")
+    model_name = serializers.CharField(required=False, allow_blank=True, default="")
+    messages = SyncChatConversationMessageSerializer(many=True, required=False, default=list)
