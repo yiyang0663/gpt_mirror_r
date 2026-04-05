@@ -6,6 +6,7 @@ import time
 import jwt
 import requests
 
+from app.accounts.gateway_usage import sync_gateway_daily_usage_for_active_users
 from app.chatgpt.models import ChatgptAccount
 from app.settings import ADMIN_PASSWORD
 from app.settings import CHATGPT_GATEWAY_URL
@@ -76,3 +77,14 @@ def check_access_token():
                 line.updated_time = int(time.time())
                 line.save()
                 logger.info(f"access_token 有效: {line.chatgpt_username}")
+
+
+def sync_gateway_user_usage():
+    result = sync_gateway_daily_usage_for_active_users()
+    if result["active_user_count"] == 0:
+        logger.info("gateway 网页用量同步: 无有效用户")
+        return
+
+    if result["failed_batches"]:
+        logger.warning("gateway 网页用量同步存在失败批次: %s", ",".join(result.get("errors", [])))
+    logger.info("gateway 网页用量同步完成: %s/%s", result["synced_user_count"], result["active_user_count"])

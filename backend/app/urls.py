@@ -24,6 +24,8 @@ urlpatterns = [
     path("v1/chat/completions", ChatCompletionsProxyView.as_view()),
     path("0x/user/", include("app.accounts.urls")),
     path("0x/chatgpt/", include("app.chatgpt.urls")),
+    path("0x/plan/", include("app.plan_urls")),
+    path("0x/system/", include("app.system_urls")),
 ]
 
 if DEBUG:

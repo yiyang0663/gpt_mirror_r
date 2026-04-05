@@ -2,12 +2,18 @@
 from django.urls import path
 
 from app.accounts.views import UserAccountView, UserRelateGPTCarView, VisitLogView, BatchModelLimit, \
-    UserChatGPTAccountList, GetMirrorToken
+    UserChatGPTAccountList, GetMirrorToken, CurrentUserProfileView, CurrentUserSessionSummaryView
 from app.accounts.views.login import AccountLogin, UserFreeLoginView, AccountRegister
+from app.accounts.views.plan import AssignUserPlanView
 from app.accounts.views.cfg import VersionConfig
+from app.chatgpt.views.usage import CurrentUserUsageSummaryView
 
 urlpatterns = [
     path("", UserAccountView.as_view()),
+    path("me", CurrentUserProfileView.as_view()),
+    path("session-summary", CurrentUserSessionSummaryView.as_view()),
+    path("assign-plan", AssignUserPlanView.as_view()),
+    path("usage-summary", CurrentUserUsageSummaryView.as_view()),
     path("version-cfg", VersionConfig.as_view()),
     path("get-mirror-token", GetMirrorToken.as_view()),
     path("register", AccountRegister.as_view()),

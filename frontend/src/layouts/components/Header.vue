@@ -145,7 +145,7 @@ const handleLogout = async () => {
 };
 
 const goPortal = () => {
-  window.open('/', '_blank', 'noopener,noreferrer');
+  window.open('/#/customer/home', '_blank', 'noopener,noreferrer');
 };
 
 const navToGitHub = () => {

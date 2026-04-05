@@ -1,5 +1,3 @@
-import time
-
 from django.contrib.auth import authenticate
 from django.utils import timezone
 from rest_framework.authtoken.models import Token
@@ -10,15 +8,17 @@ from rest_framework.views import APIView
 
 from app.accounts.models import User
 from app.accounts.serializers import UserRegisterSerializer
-from app.chatgpt.models import ChatgptAccount
 from app.settings import ADMIN_USERNAME, FREE_ACCOUNT_USERNAME
-from app.settings import ALLOW_REGISTER
-from app.utils import save_visit_log, req_gateway
+from app.settings import ALLOW_FREE_LOGIN, ALLOW_REGISTER
+from app.utils import save_visit_log
 
 
 class UserFreeLoginView(APIView):
     def post(self, request):
-        user = User.objects.filter(username=FREE_ACCOUNT_USERNAME, is_active=True).first()
+        if not ALLOW_FREE_LOGIN:
+            raise ValidationError({"message": "当前系统未开启免费体验"})
+
+        user = User.objects.filter(username=FREE_ACCOUNT_USERNAME, is_active=True, status=User.STATUS_ACTIVE).first()
         if not user:
             raise ValidationError({"message": "当前系统无免费账号可用"})
         request.user = user
@@ -36,7 +36,13 @@ class AccountLogin(ObtainAuthToken):
         serializer.is_valid(raise_exception=True)
 
         user = serializer.validated_data['user']
+        if not user.is_active or user.status == User.STATUS_DISABLED:
+            raise ValidationError({"message": "账号已停用"})
+        if user.status == User.STATUS_EXPIRED:
+            raise ValidationError({"message": "账号已过期"})
         if user.expired_date and user.expired_date <= timezone.now().date():
+            user.status = User.STATUS_EXPIRED
+            user.save(update_fields=["status"])
             raise ValidationError({"message": "账号已过期"})
 
         user.last_login = timezone.now()
@@ -55,40 +61,28 @@ class AccountLogin(ObtainAuthToken):
 
 class AccountRegister(APIView):
     def post(self, request, *args, **kwargs):
-
         if not ALLOW_REGISTER:
             raise ValidationError({"message": "当前系统禁止注册账号"})
 
         serializer = UserRegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
 
-        res_json = req_gateway("post", "/api/get-user-info", json={"chatgpt_token": serializer.data["chatgpt_token"]})
-        chatgptaccount_id = ChatgptAccount.save_data(res_json)
-
-        user = User.objects.filter(username=serializer.data["username"]).first()
-        if user and not authenticate(username=serializer.data["username"], password=serializer.data["password"]):
+        user = User.objects.filter(username=payload["username"]).first()
+        if user and not authenticate(username=payload["username"], password=payload["password"]):
             raise ValidationError({"message": "账号已存在"})
 
-        # 创建默认号池
-        from app.chatgpt.models import ChatgptCar
-        chatgptcar, created = ChatgptCar.objects.get_or_create(
-            car_name="reg_{}".format(serializer.data["username"]),
-            defaults={
-                "created_time": int(time.time()),
-                "updated_time": int(time.time()),
-                "remark": "用户注册时，系统自动创建"
-            })
-        gpt_account_list = list(chatgptcar.gpt_account_list)
-        gpt_account_list.append(chatgptaccount_id)
-        chatgptcar.gpt_account_list = list(set(gpt_account_list))
-        chatgptcar.save()
+        email_owner = User.objects.filter(email=payload["email"]).exclude(username=payload["username"]).first()
+        if email_owner:
+            raise ValidationError({"message": "邮箱已存在"})
 
-        user, created = User.objects.get_or_create(username=serializer.data["username"])
-        user.set_password(serializer.data["password"])
+        user, created = User.objects.get_or_create(username=payload["username"])
+        user.email = payload["email"]
+        user.status = User.STATUS_ACTIVE
+        user.pool_mode = User.POOL_MODE_PUBLIC
+        user.email_verified = False
+        user.set_password(payload["password"])
         user.last_login = timezone.now()
-        gptcar_list = list(user.gptcar_list)
-        gptcar_list.append(chatgptcar.id)
-        user.gptcar_list = list(set(gptcar_list))
         user.save()
 
         token, created = Token.objects.get_or_create(user=user)

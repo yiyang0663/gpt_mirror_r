@@ -51,6 +51,7 @@ export const useUserStore = defineStore('user', {
 
     async logout() {
       this.token = '';
+      this.is_admin = false;
       this.userInfo = { ...InitUserInfo };
     },
   },

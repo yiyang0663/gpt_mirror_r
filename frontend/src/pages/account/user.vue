@@ -46,7 +46,12 @@
         </template>
 
         <template #chatgpt_count="{ row }">
-          <t-link theme="primary" @click="getChatGPTDetails(row)">已绑定: {{ row.chatgpt_count }} 个</t-link>
+          <t-link theme="primary" @click="getChatGPTDetails(row)">可用账号: {{ row.chatgpt_count }} 个</t-link>
+        </template>
+
+        <template #pool_mode="{ row }">
+          <t-tag v-if="row.pool_mode === 'specific_pools'" theme="warning" variant="light">指定号池</t-tag>
+          <t-tag v-else theme="success" variant="light">站点公共账号池</t-tag>
         </template>
 
         <template #isolated_session="{ row }">
@@ -96,6 +101,10 @@
             <t-input v-model="newUser.username" :disabled="actionType == 'edit'" style="width: 240px"></t-input>
           </t-form-item>
 
+          <t-form-item label="邮箱" name="email">
+            <t-input v-model="newUser.email" style="width: 240px"></t-input>
+          </t-form-item>
+
           <t-form-item v-if="actionType == 'add'" label="密码" name="password">
             <t-input v-model="newUser.password" style="width: 240px"></t-input>
           </t-form-item>
@@ -116,16 +125,16 @@
             />
           </t-form-item>
 
-          <t-form-item label="选择 ChatGPT" name="gptcar_list">
+          <t-form-item label="账号池" name="binding_gptcar_list">
             <t-space>
-              <t-radio-group v-model="isGptcarListEmpty" class="side-mode-radio">
-                <t-radio-button key="true" :value="true" label="所有账号" />
-                <t-radio-button key="false" :value="false" label="指定号池" />
+              <t-radio-group v-model="newUser.pool_mode" class="side-mode-radio">
+                <t-radio-button key="public_pool" value="public_pool" label="站点公共账号池" />
+                <t-radio-button key="specific_pools" value="specific_pools" label="指定号池" />
               </t-radio-group>
 
               <t-select
-                v-if="!isGptcarListEmpty"
-                v-model="newUser.gptcar_list"
+                v-if="newUser.pool_mode === 'specific_pools'"
+                v-model="newUser.binding_gptcar_list"
                 multiple
                 placeholder="Select"
                 filterable
@@ -134,6 +143,12 @@
                 <t-option v-for="item in gptCarList" :key="item.car_name" :label="item.car_name" :value="item.id" />
               </t-select>
             </t-space>
+          </t-form-item>
+
+          <t-form-item label="套餐" name="plan_id">
+            <t-select v-model="newUser.plan_id" clearable style="width: 240px" placeholder="不选表示不限制套餐">
+              <t-option v-for="item in planList" :key="item.id" :label="item.name" :value="item.id" />
+            </t-select>
           </t-form-item>
 
           <t-form-item label="限制" name="model_limit">
@@ -297,13 +312,13 @@ interface TableData {
   user_info: string;
 }
 
-const isGptcarListEmpty = ref(true);
 const hasModelLimit = ref(false);
 const actionType = ref('add');
 const loading = ref(false);
 const tableLoading = ref(false);
 const tableData = ref<TableData[]>([]);
 const gptCarList = ref<any>([]);
+const planList = ref<any[]>([]);
 const showDialog = ref(false);
 const showModelLimitDialog = ref(false);
 const showDeleteDialog = ref(false);
@@ -313,18 +328,26 @@ const batchModelLimitUserFormRef = ref();
 const UserAccountUri = '/0x/user/';
 const BatchModelLimitUri = '/0x/user/batch-model-limit';
 const GptCarEnumUri = '/0x/chatgpt/car-enum';
+const PlanEnumUri = '/0x/plan/enum';
 const selectedRowKeys = ref<TableProps['selectedRowKeys']>([]);
 const showChatGPTDetailsDialog = ref(false);
 
 interface TokenUserForm {
   is_active: boolean;
+  status?: string;
   username: string;
   password?: string;
+  email?: string;
+  email_verified?: boolean;
   chatgpt_username: string;
   isolated_session: boolean;
   remark: string;
   model_limit: any[];
+  pool_mode: string;
+  binding_gptcar_list: any[];
   gptcar_list: any[];
+  quota_snapshot?: Record<string, any>;
+  plan_id?: number | null;
   expired_date: any;
 }
 
@@ -352,6 +375,9 @@ const columns: TableProps['columns'] = [
   { colKey: 'row-select', type: 'multiple', checkProps: ({ row }) => ({ disabled: row.username === 'free_account' }) },
   { colKey: 'is_active', title: '状态', width: 100 },
   { colKey: 'username', title: 'title-username', width: 200, fixed: 'left' },
+  { colKey: 'email', title: '邮箱', width: 220 },
+  { colKey: 'plan_name', title: '套餐', width: 140 },
+  { colKey: 'pool_mode', title: '账号池模式', width: 140 },
   { colKey: 'isolated_session', title: '独立会话', width: 100 },
   { colKey: 'chatgpt_count', title: 'ChatGPT', width: 120 },
   { colKey: 'use_count', title: '当日用量', width: 100 },
@@ -402,13 +428,20 @@ const modelList = [
 
 const defaultUser = {
   is_active: true,
+  status: 'active',
   username: '',
   password: '',
+  email: '',
+  email_verified: false,
   chatgpt_username: '',
   isolated_session: false,
   remark: '',
   model_limit: [] as any[],
+  pool_mode: 'public_pool',
+  binding_gptcar_list: [] as any[],
   gptcar_list: [] as any[],
+  quota_snapshot: {} as Record<string, any>,
+  plan_id: null as number | null,
   expired_date: undefined as Date | undefined,
 };
 
@@ -421,6 +454,12 @@ const getGptCarEnum = async () => {
   const response = await RequestApi(GptCarEnumUri);
   const data = await response.json();
   gptCarList.value = data.data;
+};
+
+const getPlanEnum = async () => {
+  const response = await RequestApi(PlanEnumUri);
+  const data = await response.json();
+  planList.value = data.data || [];
 };
 
 const onAddModelLimit = (atype = 'default') => {
@@ -472,8 +511,11 @@ const addOrUpdateUser = async () => {
   // 发送请求 添加/编辑 用户
 
   loading.value = true;
-  if (isGptcarListEmpty.value) {
+  if (newUser.value.pool_mode === 'public_pool') {
+    newUser.value.binding_gptcar_list = [];
     newUser.value.gptcar_list = [];
+  } else {
+    newUser.value.gptcar_list = [...newUser.value.binding_gptcar_list];
   }
 
   newUser.value.expired_date = newUser.value.expired_date || null;
@@ -517,9 +559,11 @@ const batchUpdateUserModelLimit = async () => {
 const handleEdit = async (user: TokenUserForm) => {
   newUser.value = { ...user };
   hasModelLimit.value = Boolean(newUser.value.model_limit.length !== 0);
-  isGptcarListEmpty.value = Boolean(newUser.value.gptcar_list.length === 0);
+  newUser.value.binding_gptcar_list = [...(user.binding_gptcar_list || user.gptcar_list || [])];
+  newUser.value.pool_mode = user.pool_mode || (newUser.value.binding_gptcar_list.length ? 'specific_pools' : 'public_pool');
 
   await getGptCarEnum();
+  await getPlanEnum();
 
   showDialog.value = true;
   actionType.value = 'edit';
@@ -527,6 +571,7 @@ const handleEdit = async (user: TokenUserForm) => {
 
 const handleShowDialog = async () => {
   await getGptCarEnum();
+  await getPlanEnum();
   showDialog.value = true;
   actionType.value = 'add';
   newUser.value = { ...defaultUser };

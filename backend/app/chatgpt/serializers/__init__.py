@@ -1,9 +1,19 @@
 from rest_framework import serializers
 
-from app.chatgpt.models import ChatgptAccount, ChatgptCar
+from app.chatgpt.models import ChatgptAccount, ChatgptCar, UsageLedger
 import jwt
 from app.utils import clean_int_list
 import time
+
+
+def normalize_string_list(values):
+    if values is None:
+        return []
+    if isinstance(values, str):
+        values = [item.strip() for item in values.split(",")]
+    if not isinstance(values, list):
+        raise serializers.ValidationError("必须是字符串数组")
+    return [str(item).strip() for item in values if str(item).strip()]
 
 class ShowGptCarSerializer(serializers.ModelSerializer):
     gpt_account_name_list = serializers.SerializerMethodField()
@@ -72,8 +82,34 @@ class AddChatgptTokenSerializer(serializers.Serializer):
     relay_api_key = serializers.CharField(required=False, allow_blank=True)
     plan_type = serializers.CharField(required=False, allow_blank=True, default="relay")
     remark = serializers.CharField(required=False, allow_blank=True, default="")
+    supported_models = serializers.JSONField(required=False, default=list)
+    priority = serializers.IntegerField(required=False, default=100)
+    weight = serializers.IntegerField(required=False, default=1)
+    health_status = serializers.ChoiceField(
+        choices=[item[0] for item in ChatgptAccount.HEALTH_STATUS_CHOICES],
+        required=False,
+        default=ChatgptAccount.HEALTH_STATUS_HEALTHY,
+    )
+    max_concurrency = serializers.IntegerField(required=False, default=1)
+    rpm_limit = serializers.IntegerField(required=False, default=0)
+    tpm_limit = serializers.IntegerField(required=False, default=0)
+    unit_cost = serializers.DecimalField(required=False, max_digits=10, decimal_places=4, default="0")
+    enabled_for_web = serializers.BooleanField(required=False, default=True)
+    enabled_for_api = serializers.BooleanField(required=False, default=True)
 
     def validate(self, attrs):
+        attrs["supported_models"] = normalize_string_list(attrs.get("supported_models", []))
+        if attrs["priority"] < 0:
+            raise serializers.ValidationError({"priority": "优先级不能小于 0"})
+        if attrs["weight"] <= 0:
+            raise serializers.ValidationError({"weight": "权重必须大于 0"})
+        if attrs["max_concurrency"] <= 0:
+            raise serializers.ValidationError({"max_concurrency": "最大并发必须大于 0"})
+        if attrs["rpm_limit"] < 0:
+            raise serializers.ValidationError({"rpm_limit": "RPM 不能小于 0"})
+        if attrs["tpm_limit"] < 0:
+            raise serializers.ValidationError({"tpm_limit": "TPM 不能小于 0"})
+
         if attrs["account_type"] == ChatgptAccount.ACCOUNT_TYPE_RELAY:
             if not attrs.get("chatgpt_username"):
                 raise serializers.ValidationError({"chatgpt_username": "中转站账号标识不能为空"})
@@ -95,8 +131,76 @@ class DeleteChatgptAccountSerializer(serializers.Serializer):
 
 class UpdateChatgptInfoSerializer(serializers.Serializer):
     chatgpt_username = serializers.CharField()
-    remark = serializers.CharField()
+    plan_type = serializers.CharField(required=False, allow_blank=True, default="")
+    remark = serializers.CharField(required=False, allow_blank=True, default="")
+    supported_models = serializers.JSONField(required=False, default=list)
+    priority = serializers.IntegerField(required=False, default=100)
+    weight = serializers.IntegerField(required=False, default=1)
+    health_status = serializers.ChoiceField(
+        choices=[item[0] for item in ChatgptAccount.HEALTH_STATUS_CHOICES],
+        required=False,
+        default=ChatgptAccount.HEALTH_STATUS_HEALTHY,
+    )
+    max_concurrency = serializers.IntegerField(required=False, default=1)
+    rpm_limit = serializers.IntegerField(required=False, default=0)
+    tpm_limit = serializers.IntegerField(required=False, default=0)
+    unit_cost = serializers.DecimalField(required=False, max_digits=10, decimal_places=4, default="0")
+    enabled_for_web = serializers.BooleanField(required=False, default=True)
+    enabled_for_api = serializers.BooleanField(required=False, default=True)
+
+    def validate(self, attrs):
+        attrs["supported_models"] = normalize_string_list(attrs.get("supported_models", []))
+        if attrs["priority"] < 0:
+            raise serializers.ValidationError({"priority": "优先级不能小于 0"})
+        if attrs["weight"] <= 0:
+            raise serializers.ValidationError({"weight": "权重必须大于 0"})
+        if attrs["max_concurrency"] <= 0:
+            raise serializers.ValidationError({"max_concurrency": "最大并发必须大于 0"})
+        if attrs["rpm_limit"] < 0:
+            raise serializers.ValidationError({"rpm_limit": "RPM 不能小于 0"})
+        if attrs["tpm_limit"] < 0:
+            raise serializers.ValidationError({"tpm_limit": "TPM 不能小于 0"})
+        return attrs
 
 
 class ChatGPTLoginSerializer(serializers.Serializer):
-    chatgpt_id = serializers.IntegerField()
+    chatgpt_id = serializers.IntegerField(required=False, allow_null=True)
+    model = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class ShowUsageLedgerSerializer(serializers.ModelSerializer):
+    username = serializers.SerializerMethodField()
+    chatgpt_username = serializers.SerializerMethodField()
+    account_type = serializers.SerializerMethodField()
+    source_type = serializers.SerializerMethodField()
+
+    def get_username(self, obj):
+        return obj.user.username if obj.user else ""
+
+    def get_chatgpt_username(self, obj):
+        return obj.account.chatgpt_username if obj.account else ""
+
+    def get_account_type(self, obj):
+        return obj.account.account_type if obj.account else ""
+
+    def get_source_type(self, obj):
+        return obj.account.source_type if obj.account else ""
+
+    class Meta:
+        model = UsageLedger
+        fields = (
+            "id",
+            "username",
+            "chatgpt_username",
+            "account_type",
+            "source_type",
+            "model_name",
+            "request_type",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+            "estimated_cost",
+            "status_code",
+            "error_code",
+            "created_at",
+        )

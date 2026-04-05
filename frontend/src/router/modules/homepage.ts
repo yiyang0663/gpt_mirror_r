@@ -42,6 +42,17 @@ export default [
           },
         },
       },
+      {
+        path: 'plan',
+        name: 'Plan',
+        component: () => import('@/pages/account/plan.vue'),
+        meta: {
+          title: {
+            zh_CN: '套餐',
+            en_US: 'Plan',
+          },
+        },
+      },
 
       {
         path: 'gptcar',
@@ -70,6 +81,28 @@ export default [
       orderNo: 1,
     },
     children: [
+      {
+        path: 'web-usage-sync',
+        name: 'WebUsageSync',
+        component: () => import('@/pages/system/web_usage_sync.vue'),
+        meta: {
+          title: {
+            zh_CN: '网页用量同步',
+            en_US: 'Web Usage Sync',
+          },
+        },
+      },
+      {
+        path: 'usage',
+        name: 'UsageLedger',
+        component: () => import('@/pages/system/usage.vue'),
+        meta: {
+          title: {
+            zh_CN: '用量账本',
+            en_US: 'Usage Ledger',
+          },
+        },
+      },
       {
         path: 'login-log',
         name: 'LoginLog',

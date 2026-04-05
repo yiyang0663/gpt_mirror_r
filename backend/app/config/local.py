@@ -8,6 +8,7 @@ FREE_ACCOUNT_USERNAME = "free_account"
 ADMIN_USERNAME = "dairoot"
 ADMIN_PASSWORD = "dairoot"
 ALLOW_REGISTER = True
+ALLOW_FREE_LOGIN = False
 # CHATGPT_GATEWAY_URL = "https://dairoot.serv00.net"
 CHATGPT_GATEWAY_URL = "http://127.0.0.1:8787"
 
@@ -17,5 +18,5 @@ log_file_path = os.path.join(BASE_DIR, os.pardir, 'logs/cron.log')
 CRONJOBS = [
     ('*/1 * * * *', 'app.cron.check_access_token', f'>> {log_file_path}'),
     ('*/1 * * * *', 'app.cron.update_access_token', f'>> {log_file_path}'),
-
+    ('*/1 * * * *', 'app.cron.sync_gateway_user_usage', f'>> {log_file_path}'),
 ]

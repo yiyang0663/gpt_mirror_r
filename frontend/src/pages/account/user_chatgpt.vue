@@ -17,8 +17,14 @@
       <t-tag v-else theme="primary" variant="light"> ChatGPT </t-tag>
     </template>
 
+    <template #proxy_mirror_token="{ row }">
+      {{ row.proxy_mirror_token || row.mirror_token }}
+    </template>
+
     <template #op="slotProps">
-      <t-link theme="primary" @click="handleCopyToken(slotProps.row.mirror_token)"> 复制 Token</t-link>
+      <t-link theme="primary" @click="handleCopyToken(slotProps.row.proxy_mirror_token || slotProps.row.mirror_token)">
+        复制 Token
+      </t-link>
     </template>
   </t-table>
 </template>
@@ -31,6 +37,7 @@ import RequestApi from '@/api/request';
 
 interface TableChatgptDetailsData {
   mirror_token: string;
+  proxy_mirror_token?: string;
   chatgpt_username: string;
   plan_type: string;
   account_type: string;
@@ -44,7 +51,7 @@ const columnsChatgptDetails: TableProps['columns'] = [
   { colKey: 'account_type', title: '接入方式', width: 80 },
   { colKey: 'plan_type', title: '类型', width: 50 },
   { colKey: 'auth_status', title: '状态', width: 50 },
-  { colKey: 'mirror_token', title: 'API Token', width: 180 },
+  { colKey: 'proxy_mirror_token', title: 'API Token', width: 220 },
   { colKey: 'op', title: '操作', width: 60 },
 ];
 

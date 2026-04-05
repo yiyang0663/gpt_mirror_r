@@ -10,6 +10,16 @@ interface MirrorTokenItem {
 export const redirectToConsumerChat = async () => {
   const response = await RequestApi('/0x/user/get-mirror-token');
   if (!response.ok) {
+    try {
+      const errorData = await response.json();
+      if (errorData?.message) {
+        MessagePlugin.error(errorData.message);
+      } else {
+        MessagePlugin.error('获取对话入口失败');
+      }
+    } catch (error) {
+      MessagePlugin.error('获取对话入口失败');
+    }
     return false;
   }
 

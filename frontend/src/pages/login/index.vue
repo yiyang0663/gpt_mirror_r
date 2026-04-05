@@ -37,11 +37,11 @@
         </button>
 
         <div class="signin-card">
-          <p class="signin-title">获取为你量身定制的回复</p>
-          <p class="signin-copy">登录以获取基于已保存聊天的回答，并可创建图片和上传文件。</p>
+          <p class="signin-title">注册或登录后即可开始对话</p>
+          <p class="signin-copy">账号体系由站点统一管理，登录后直接使用后台已配置的官方账号和中转站账号。</p>
 
           <button class="signin-button" type="button" @click="openPanel('login')">登录</button>
-          <button class="signin-link" type="button" @click="goFree">免费体验</button>
+          <button class="signin-link" type="button" @click="openPanel('register')">注册</button>
 
           <div v-if="cfg.notice" class="notice-copy" v-html="cfg.notice"></div>
 
@@ -139,20 +139,13 @@
               ></t-input>
             </t-form-item>
 
-            <t-form-item v-if="isRegisterMode" name="chatgpt_token">
-              <div class="token-field">
-                <t-textarea
-                  v-model="loginForm.chatgpt_token"
-                  size="large"
-                  placeholder="ChatGPT Cookies Token"
-                ></t-textarea>
-                <span class="token-hint">
-                  Session Token 获取说明：
-                  <t-link target="_blank" theme="primary" size="small" :href="ChatgptTokenTutorialUrl">
-                    手动获取
-                  </t-link>
-                </span>
-              </div>
+            <t-form-item v-if="isRegisterMode" name="email">
+              <t-input
+                v-model="loginForm.email"
+                size="large"
+                autocomplete="email"
+                placeholder="邮箱"
+              ></t-input>
             </t-form-item>
 
             <t-form-item>
@@ -168,8 +161,6 @@
           <button class="inline-link" type="button" @click="switchPanel(isRegisterMode ? 'login' : 'register')">
             {{ isRegisterMode ? '登录' : '注册' }}
           </button>
-          <span>或</span>
-          <button class="inline-link inline-link-accent" type="button" @click="goFree">免费体验</button>
         </div>
       </div>
     </div>
@@ -182,9 +173,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import LogoOpenai from '@/assets/openai-logo.svg';
-import { ChatgptTokenTutorialUrl } from '@/constants/index';
 import { useUserStore } from '@/store';
-import { redirectToConsumerChat } from '@/utils/direct-chat';
 
 type PanelMode = 'login' | 'register' | null;
 
@@ -238,14 +227,12 @@ const router = useRouter();
 
 const loading = ref(false);
 const panelMode = ref<PanelMode>(null);
-const cfg = ref({ show_github: false, notice: '' });
+const cfg = ref({ show_github: false, notice: '', allow_free_login: false });
 
 const loginForm = reactive({
   username: '',
   password: '',
-  chatgpt_token: undefined,
-  invite_token: undefined,
-  invite_id: undefined,
+  email: '',
 });
 
 const loginFormRef = ref<FormInstanceFunctions | null>(null);
@@ -253,9 +240,7 @@ const loginFormRef = ref<FormInstanceFunctions | null>(null);
 const rules: Record<string, FormRule[]> = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
-  chatgpt_token: [
-    { required: true, message: '请输入 Access Token 或 Session Token 或 Refresh Token', trigger: 'blur' },
-  ],
+  email: [{ required: true, message: '请输入邮箱', trigger: 'blur' }],
 };
 
 const showAuthPanel = computed(() => panelMode.value !== null);
@@ -312,29 +297,22 @@ const onSubmit: FormProps['onSubmit'] = async ({ validateResult, firstError }) =
 
   loading.value = true;
   let url = '/0x/user/login';
+  const payload: Record<string, string> = {
+    username: loginForm.username,
+    password: loginForm.password,
+  };
 
   if (isRegisterMode.value) {
     url = '/0x/user/register';
+    payload.email = loginForm.email;
   }
-
-  if (route.path.endsWith('/invite_register')) {
-    const { hash } = window.location;
-    const paramsString = hash.split('?')[1];
-    const params = new URLSearchParams(paramsString);
-    loginForm.invite_token = params.get('invite_token');
-    loginForm.invite_id = params.get('id');
-  }
-
-  const data = await userStore.login(url, loginForm);
+  const data = await userStore.login(url, payload);
   if (data?.admin_token && data.is_admin) {
     router.push({ name: 'User' });
     return;
   }
   if (data?.admin_token) {
-    const redirected = await redirectToConsumerChat();
-    if (!redirected) {
-      router.push({ name: 'LoginChatgpt' });
-    }
+    router.push({ name: 'CustomerHome' });
     return;
   }
 
@@ -345,20 +323,6 @@ const getVersionCfg = async () => {
   const response = await fetch('/0x/user/version-cfg');
   const data = await response.json();
   Object.assign(cfg.value, { ...data });
-};
-
-const goFree = async () => {
-  loading.value = true;
-  const data = await userStore.login('/0x/user/login-free', {});
-  if (data?.admin_token) {
-    const redirected = await redirectToConsumerChat();
-    if (!redirected) {
-      router.push({ name: 'LoginChatgpt' });
-    }
-    return;
-  }
-
-  loading.value = false;
 };
 </script>
 

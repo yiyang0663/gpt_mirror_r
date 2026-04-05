@@ -32,6 +32,23 @@ const defaultRouterList: Array<RouteRecordRaw> = [
     component: () => import('@/pages/login/index.vue'),
   },
   {
+    path: '/customer',
+    component: () => import('@/pages/customer/layout.vue'),
+    redirect: '/customer/home',
+    children: [
+      {
+        path: 'home',
+        name: 'CustomerHome',
+        component: () => import('@/pages/customer/home.vue'),
+      },
+      {
+        path: 'account',
+        name: 'CustomerAccount',
+        component: () => import('@/pages/customer/account.vue'),
+      },
+    ],
+  },
+  {
     path: '/',
     redirect: '/login',
     // redirect: '/login-chatgpt',

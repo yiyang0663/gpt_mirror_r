@@ -4,15 +4,60 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from app.accounts.models import User, VisitLog
+from app.accounts.models import User, VisitLog, ServicePlan
+from app.accounts.quota import assign_service_plan, build_user_quota_status, get_user_plan, sync_user_plan_snapshot
 from app.accounts.serializers import ShowVisitLogModelSerializer, AddUserAccountSerializer, UserBindChatGPTSerializer, \
-    ShowUserAccountModelSerializer, BatchModelLimitSerializer
-from app.chatgpt.models import ChatgptAccount
-from app.chatgpt.relay import build_relay_mirror_token
+    ShowUserAccountModelSerializer, BatchModelLimitSerializer, CurrentUserProfileSerializer
+from app.chatgpt.dispatcher import get_dispatch_candidates, save_dispatch_log
+from app.chatgpt.models import ChatgptAccount, ChatgptCar, DispatcherDecisionLog
+from app.chatgpt.relay import build_account_proxy_token, build_relay_mirror_token
 from app.page import DefaultPageNumberPagination
 from app.settings import ADMIN_USERNAME
 from app.utils import req_gateway
 from datetime import datetime
+
+
+def save_user_pool_bindings(user, pool_ids):
+    pool_ids = list(dict.fromkeys(pool_ids))
+    user.pool_bindings.exclude(gptcar_id__in=pool_ids).delete()
+
+    existing_ids = set(user.pool_bindings.values_list("gptcar_id", flat=True))
+    for pool_id in pool_ids:
+        if pool_id not in existing_ids:
+            user.pool_bindings.create(gptcar_id=pool_id)
+
+
+def validate_user_access(user):
+    if not user or not user.is_active or user.status == User.STATUS_DISABLED:
+        raise ValidationError({"message": "账号已停用"})
+    if user.status == User.STATUS_EXPIRED:
+        raise ValidationError({"message": "账号已过期"})
+    if user.expired_date and user.expired_date <= datetime.now().date():
+        raise ValidationError({"message": "账号已过期"})
+
+
+def build_channel_quota_payload(user, channel="api", model_name=""):
+    quota_status = build_user_quota_status(user, channel=channel, model_name=model_name)
+    plan = quota_status["plan"]
+    return {
+        "allowed": quota_status["allowed"],
+        "reason": quota_status["reason"],
+        "plan_name": plan.name if plan else "",
+        "plan_code": plan.code if plan else "",
+        "rules": quota_status["rules"],
+        "warnings": quota_status.get("warnings", []),
+    }
+
+
+def validate_user_channel_access(user, channel="web", model_name=""):
+    validate_user_access(user)
+    quota_status = build_user_quota_status(user, channel=channel, model_name=model_name)
+    if not quota_status["allowed"]:
+        raise ValidationError({
+            "message": quota_status["reason"],
+            "quota_rules": quota_status["rules"],
+        })
+    return quota_status
 
 
 class GetMirrorToken(APIView):
@@ -20,6 +65,7 @@ class GetMirrorToken(APIView):
 
     def get(self, request):
         request_user_id = request.GET.get("user_id")
+        model_name = request.GET.get("model", "")
         if request_user_id:
             if request.user.username != ADMIN_USERNAME and str(request.user.id) != request_user_id:
                 raise ValidationError({"message": "无权查看其他用户的 Token"})
@@ -27,35 +73,55 @@ class GetMirrorToken(APIView):
         else:
             user = request.user
 
-        if not user:
-            raise ValidationError({"message": "用户不存在"})
+        validate_user_channel_access(user, channel="web", model_name=model_name)
 
-        user_gpt_list = ChatgptAccount.get_by_gptcar_list(user.gptcar_list)
+        user_gpt_list = get_dispatch_candidates(user, channel="web", model_name=model_name, only_available=True)
+        save_dispatch_log(
+            user=user,
+            account=user_gpt_list[0] if user_gpt_list else None,
+            entrypoint="get_mirror_token",
+            channel="web",
+            model_name=model_name,
+            candidate_accounts=user_gpt_list,
+            decision_status="selected" if user_gpt_list else "empty",
+            reason="issued ordered mirror token candidates",
+        )
+
         gateway_account_list = [i for i in user_gpt_list if not i.is_relay_account]
-        relay_account_list = [i for i in user_gpt_list if i.is_relay_account]
-        res = []
+        gateway_token_dict = {}
 
         if gateway_account_list:
             chatgpt_username_list = [i.chatgpt_username for i in gateway_account_list]
-            res = req_gateway("post", "/api/get-mirror-token", json={
+            gateway_response = req_gateway("post", "/api/get-mirror-token", json={
                 "isolated_session": user.isolated_session,
                 "limits": user.model_limit,
                 "chatgpt_list": chatgpt_username_list,
                 "user_name": user.username,
             })
-            for line in res:
-                obj = ChatgptAccount.objects.filter(chatgpt_username=line["chatgpt_username"]).first()
-                line["id"] = obj.id
-                line["auth_status"] = obj.auth_status
-                line["plan_type"] = obj.plan_type
-                line["account_type"] = obj.account_type
+            gateway_token_dict = {line["chatgpt_username"]: line for line in gateway_response}
 
-        for account in relay_account_list:
+        res = []
+        for account in user_gpt_list:
+            if account.is_relay_account:
+                proxy_token = build_relay_mirror_token(user.id, account.id)
+                res.append({
+                    "id": account.id,
+                    "chatgpt_username": account.chatgpt_username,
+                    "mirror_token": proxy_token,
+                    "proxy_mirror_token": proxy_token,
+                    "auth_status": account.auth_status,
+                    "plan_type": account.plan_type,
+                    "account_type": account.account_type,
+                })
+                continue
+
+            gateway_item = gateway_token_dict.get(account.chatgpt_username, {})
             res.append({
                 "id": account.id,
                 "chatgpt_username": account.chatgpt_username,
-                "mirror_token": build_relay_mirror_token(user.id, account.id),
-                "auth_status": account.auth_status,
+                "mirror_token": gateway_item.get("mirror_token", ""),
+                "proxy_mirror_token": build_account_proxy_token(user.id, account.id),
+                "auth_status": gateway_item.get("auth_status", account.auth_status),
                 "plan_type": account.plan_type,
                 "account_type": account.account_type,
             })
@@ -66,8 +132,20 @@ class UserChatGPTAccountList(APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request):
+        model_name = request.GET.get("model", "")
+        validate_user_channel_access(request.user, channel="web", model_name=model_name)
         results = []
-        user_gpt_list = ChatgptAccount.get_by_gptcar_list(request.user.gptcar_list)
+        user_gpt_list = get_dispatch_candidates(request.user, channel="web", model_name=model_name, only_available=True)
+        save_dispatch_log(
+            user=request.user,
+            account=user_gpt_list[0] if user_gpt_list else None,
+            entrypoint="user_chatgpt_list",
+            channel="web",
+            model_name=model_name,
+            candidate_accounts=user_gpt_list,
+            decision_status="selected" if user_gpt_list else "empty",
+            reason="listed ordered user accounts",
+        )
         chatgpt_list = [i.chatgpt_username for i in user_gpt_list if not i.is_relay_account]
 
         try:
@@ -106,6 +184,117 @@ class UserChatGPTAccountList(APIView):
         return Response({"results": results})
 
 
+class CurrentUserProfileView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        validate_user_access(request.user)
+        serializer = CurrentUserProfileSerializer(instance=request.user)
+        return Response(serializer.data)
+
+
+class CurrentUserSessionSummaryView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        user = request.user
+        validate_user_access(user)
+        model_name = request.GET.get("model", "")
+        web_accounts = list(ChatgptAccount.get_for_user(user, channel="web", only_available=True))
+        api_accounts = list(ChatgptAccount.get_for_user(user, channel="api", only_available=True))
+        web_candidates = get_dispatch_candidates(user, channel="web", model_name=model_name, only_available=True)
+        api_candidates = get_dispatch_candidates(user, channel="api", model_name=model_name, only_available=True)
+        web_quota_status = build_channel_quota_payload(user, channel="web", model_name=model_name)
+        api_quota_status = build_channel_quota_payload(user, channel="api", model_name=model_name)
+        bound_pools = [
+            {
+                "id": pool.id,
+                "car_name": pool.car_name,
+                "account_count": len(pool.gpt_account_list or []),
+            }
+            for pool in ChatgptCar.objects.filter(id__in=user.get_bound_pool_ids()).order_by("id").all()
+        ]
+
+        supported_models = []
+        for account in web_accounts:
+            for model in account.supported_models or []:
+                model = str(model).strip()
+                if not model or model in {"*", "all"} or model in supported_models:
+                    continue
+                supported_models.append(model)
+        recent_dispatches = []
+        recent_logs = (
+            DispatcherDecisionLog.objects.select_related("account")
+            .filter(user=user)
+            .order_by("-id")[:8]
+        )
+        for item in recent_logs:
+            recent_dispatches.append(
+                {
+                    "id": item.id,
+                    "entrypoint": item.entrypoint,
+                    "channel": item.channel,
+                    "model_name": item.model_name,
+                    "decision_status": item.decision_status,
+                    "reason": item.reason,
+                    "created_time": item.created_time,
+                    "candidate_count": len(item.candidate_account_ids or []),
+                    "account": {
+                        "id": item.account_id,
+                        "chatgpt_username": item.account.chatgpt_username if item.account else "",
+                        "account_type": item.account.account_type if item.account else "",
+                        "source_type": item.account.source_type if item.account else "",
+                        "health_status": item.account.health_status if item.account else "",
+                        "plan_type": item.account.plan_type if item.account else "",
+                    },
+                }
+            )
+
+        session_ready = web_quota_status["allowed"] and bool(web_candidates)
+        recommended_account = web_candidates[0] if session_ready else None
+        session_reason = ""
+        if not web_quota_status["allowed"]:
+            session_reason = web_quota_status["reason"]
+        elif not web_candidates:
+            session_reason = "当前账号暂未分配可用的对话通道"
+
+        return Response(
+            {
+                "available": session_ready,
+                "reason": session_reason,
+                "pool_mode": user.pool_mode,
+                "isolated_session": user.isolated_session,
+                "bound_pools": bound_pools,
+                "web_quota_status": web_quota_status,
+                "api_quota_status": api_quota_status,
+                "available_accounts": {
+                    "web_total": len(web_accounts),
+                    "api_total": len(api_accounts),
+                    "web_official": len([item for item in web_accounts if item.source_type == ChatgptAccount.SOURCE_TYPE_OFFICIAL]),
+                    "web_relay": len([item for item in web_accounts if item.source_type == ChatgptAccount.SOURCE_TYPE_RELAY]),
+                    "api_official": len([item for item in api_accounts if item.source_type == ChatgptAccount.SOURCE_TYPE_OFFICIAL]),
+                    "api_relay": len([item for item in api_accounts if item.source_type == ChatgptAccount.SOURCE_TYPE_RELAY]),
+                    "web_candidates": len(web_candidates),
+                    "api_candidates": len(api_candidates),
+                },
+                "supported_models": supported_models[:12],
+                "recommended_account": (
+                    {
+                        "id": recommended_account.id,
+                        "chatgpt_username": recommended_account.chatgpt_username,
+                        "account_type": recommended_account.account_type,
+                        "source_type": recommended_account.source_type,
+                        "health_status": recommended_account.health_status,
+                        "plan_type": recommended_account.plan_type,
+                    }
+                    if recommended_account
+                    else None
+                ),
+                "recent_dispatches": recent_dispatches,
+            }
+        )
+
+
 class BatchModelLimit(APIView):
     permission_classes = (IsAuthenticated, IsAdminUser)
 
@@ -122,10 +311,15 @@ class UserRelateGPTCarView(APIView):
     def post(self, request, *args, **kwargs):
         serializer = UserBindChatGPTSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        for user_id in serializer.data["user_id_list"]:
+        for user_id in serializer.validated_data["user_id_list"]:
             user = User.objects.filter(id=user_id).first()
-            user.gptcar_list = serializer.data["gptcar_id_list"]
+            if not user:
+                continue
+            pool_ids = serializer.validated_data["gptcar_id_list"]
+            user.pool_mode = User.POOL_MODE_SPECIFIC if pool_ids else User.POOL_MODE_PUBLIC
+            user.gptcar_list = pool_ids
             user.save()
+            save_user_pool_bindings(user, pool_ids)
 
         return Response({"message": "绑定成功"})
 
@@ -150,28 +344,45 @@ class UserAccountView(generics.ListCreateAPIView):
         # 添加或更新用户
         serializer = AddUserAccountSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        if serializer.data["username"] == ADMIN_USERNAME:
+        payload = serializer.validated_data
+
+        if payload["username"] == ADMIN_USERNAME:
             raise ValidationError({"message": "管理员账号不能操作"})
 
-        user, created = User.objects.get_or_create(username=serializer.data["username"], defaults=serializer.data)
+        user, created = User.objects.get_or_create(username=payload["username"])
+        previous_plan = get_user_plan(user)
 
-        if serializer.data.get("password"):
-            user.set_password(serializer.data["password"])
+        if payload.get("password"):
+            user.set_password(payload["password"])
 
-        if "expired_date" in serializer.data.keys():
-            user.expired_date = serializer.data["expired_date"]
+        if "expired_date" in payload.keys():
+            user.expired_date = payload["expired_date"]
 
-        user.gptcar_list = serializer.data["gptcar_list"]
-        user.is_active = serializer.data["is_active"]
-        user.model_limit = serializer.data["model_limit"]
-        user.isolated_session = serializer.data["isolated_session"]
-        user.remark = serializer.data["remark"]
+        user.email = payload.get("email", "")
+        user.email_verified = payload.get("email_verified", False)
+        user.status = payload["status"]
+        user.pool_mode = payload["pool_mode"]
+        user.plan_id = payload.get("plan_id")
+        user.quota_snapshot = payload.get("quota_snapshot", {})
+        user.gptcar_list = payload["gptcar_list"]
+        user.is_active = payload["is_active"]
+        user.model_limit = payload["model_limit"]
+        user.isolated_session = payload["isolated_session"]
+        user.remark = payload["remark"]
         user.save()
+        next_plan_id = payload.get("plan_id")
+        previous_plan_id = previous_plan.id if previous_plan else None
+        if previous_plan_id != next_plan_id:
+            plan = ServicePlan.objects.filter(id=next_plan_id, is_active=True).first() if next_plan_id else None
+            assign_service_plan(user, plan=plan)
+        else:
+            sync_user_plan_snapshot(user)
+        save_user_pool_bindings(user, payload["binding_gptcar_list"])
 
-        if not serializer.data["is_active"]:
+        if not payload["is_active"]:
             # 注销登录
             try:
-                req_gateway("post", "/api/logout", json={"user_name": serializer.data["username"]})
+                req_gateway("post", "/api/logout", json={"user_name": payload["username"]})
             except:
                 pass
 

@@ -3,7 +3,7 @@
     <t-card class="list-card-container">
       <t-row justify="space-between">
         <div class="left-operation-container">
-          <t-button @click="showDialog = true">录入</t-button>
+          <t-button @click="handleShowDialog">录入</t-button>
 
           <p v-if="!!selectedRowKeys.length" class="selected-count">
             {{ $t('pages.listBase.select') }} {{ selectedRowKeys.length }} {{ $t('pages.listBase.items') }}
@@ -32,8 +32,31 @@
           <t-tag v-else theme="primary" variant="light"> ChatGPT </t-tag>
         </template>
 
+        <template #source_type="{ row }">
+          <t-tag v-if="row.source_type === 'relay'" theme="warning" variant="light"> 中转站 </t-tag>
+          <t-tag v-else theme="primary" variant="light"> 官方账号 </t-tag>
+        </template>
+
         <template #auth_mode="{ row }">
           {{ formatAuthMode(row.auth_mode) }}
+        </template>
+
+        <template #health_status="{ row }">
+          <t-tag v-if="row.health_status === 'down'" theme="danger" variant="light"> 停用 </t-tag>
+          <t-tag v-else-if="row.health_status === 'degraded'" theme="warning" variant="light"> 降级 </t-tag>
+          <t-tag v-else theme="success" variant="light"> 健康 </t-tag>
+        </template>
+
+        <template #supported_models="{ row }">
+          {{ row.supported_models?.length ? row.supported_models.join(', ') : '自动/不限' }}
+        </template>
+
+        <template #enabled_for_web="{ row }">
+          {{ row.enabled_for_web ? '是' : '否' }}
+        </template>
+
+        <template #enabled_for_api="{ row }">
+          {{ row.enabled_for_api ? '是' : '否' }}
         </template>
 
         <!--
@@ -133,14 +156,86 @@
               <t-input v-model="newChat.remark" size="large" placeholder="可选备注"></t-input>
             </t-form-item>
           </template>
+
+          <t-form-item label="支持模型">
+            <t-select v-model="newChat.supported_models" multiple filterable placeholder="留空表示自动/不限">
+              <t-option v-for="item in modelOptions" :key="item" :label="item" :value="item" />
+            </t-select>
+          </t-form-item>
+          <t-form-item label="优先级">
+            <t-input-number v-model="newChat.priority" theme="normal" :min="0" />
+          </t-form-item>
+          <t-form-item label="权重">
+            <t-input-number v-model="newChat.weight" theme="normal" :min="1" />
+          </t-form-item>
+          <t-form-item label="健康状态">
+            <t-select v-model="newChat.health_status">
+              <t-option v-for="item in healthStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </t-select>
+          </t-form-item>
+          <t-form-item label="网页可用">
+            <t-switch v-model="newChat.enabled_for_web" :custom-value="[true, false]" />
+          </t-form-item>
+          <t-form-item label="API 可用">
+            <t-switch v-model="newChat.enabled_for_api" :custom-value="[true, false]" />
+          </t-form-item>
+          <t-form-item label="最大并发">
+            <t-input-number v-model="newChat.max_concurrency" theme="normal" :min="1" />
+          </t-form-item>
+          <t-form-item label="RPM">
+            <t-input-number v-model="newChat.rpm_limit" theme="normal" :min="0" />
+          </t-form-item>
+          <t-form-item label="TPM">
+            <t-input-number v-model="newChat.tpm_limit" theme="normal" :min="0" />
+          </t-form-item>
+          <t-form-item label="单位成本">
+            <t-input-number v-model="newChat.unit_cost" theme="normal" :min="0" :step="0.0001" />
+          </t-form-item>
         </t-form>
       </t-dialog>
 
       <!-- 编辑 备注信息 -->
       <t-dialog v-model:visible="dialogVisibleEdit" header="编辑信息" width="50%" :on-confirm="handleEditConfirm">
         <t-form v-loading="loading" :data="editChatInfo" :label-width="120">
+          <t-form-item label="类型标记">
+            <t-input v-model="editChatInfo.plan_type" size="large" placeholder="类型标记"></t-input>
+          </t-form-item>
           <t-form-item label="备注信息">
             <t-input v-model="editChatInfo.remark" size="large" placeholder="备注信息"></t-input>
+          </t-form-item>
+          <t-form-item label="支持模型">
+            <t-select v-model="editChatInfo.supported_models" multiple filterable placeholder="留空表示自动/不限">
+              <t-option v-for="item in modelOptions" :key="item" :label="item" :value="item" />
+            </t-select>
+          </t-form-item>
+          <t-form-item label="优先级">
+            <t-input-number v-model="editChatInfo.priority" theme="normal" :min="0" />
+          </t-form-item>
+          <t-form-item label="权重">
+            <t-input-number v-model="editChatInfo.weight" theme="normal" :min="1" />
+          </t-form-item>
+          <t-form-item label="健康状态">
+            <t-select v-model="editChatInfo.health_status">
+              <t-option v-for="item in healthStatusOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </t-select>
+          </t-form-item>
+          <t-form-item label="网页可用">
+            <t-switch v-model="editChatInfo.enabled_for_web" :custom-value="[true, false]" />
+          </t-form-item>
+          <t-form-item label="API 可用">
+            <t-switch v-model="editChatInfo.enabled_for_api" :custom-value="[true, false]" />
+          </t-form-item>
+          <t-form-item label="最大并发">
+            <t-input-number v-model="editChatInfo.max_concurrency" theme="normal" :min="1" />
+          </t-form-item>
+          <t-form-item label="RPM">
+            <t-input-number v-model="editChatInfo.rpm_limit" theme="normal" :min="0" />
+          </t-form-item>
+          <t-form-item label="TPM">
+            <t-input-number v-model="editChatInfo.tpm_limit" theme="normal" :min="0" />
+          </t-form-item>
+          <t-form-item label="单位成本">
+            <t-input-number v-model="editChatInfo.unit_cost" theme="normal" :min="0" :step="0.0001" />
           </t-form-item>
         </t-form>
       </t-dialog>
@@ -168,8 +263,19 @@ import { TimestampToDate } from '@/utils/date';
 interface TableData {
   chatgpt_username: string;
   account_type: string;
+  source_type: string;
   auth_mode: string;
+  health_status: string;
   plan_type: string;
+  supported_models: string[];
+  enabled_for_web: boolean;
+  enabled_for_api: boolean;
+  priority: number;
+  weight: number;
+  max_concurrency: number;
+  rpm_limit: number;
+  tpm_limit: number;
+  unit_cost: number;
   access_token_exp: number;
   remark: string;
 }
@@ -195,9 +301,20 @@ const columns: TableProps['columns'] = [
   { colKey: 'id', title: 'ID', width: 50 },
   { colKey: 'chatgpt_username', title: '账号标识', width: 220, fixed: 'left' },
   { colKey: 'account_type', title: '接入方式', width: 120 },
+  { colKey: 'source_type', title: '来源', width: 100 },
   { colKey: 'auth_mode', title: '授权方式', width: 120 },
   { colKey: 'auth_status', title: '状态', width: 100, fixed: 'left' },
+  { colKey: 'health_status', title: '健康状态', width: 100 },
   { colKey: 'plan_type', title: '类型', width: 100 },
+  { colKey: 'supported_models', title: '支持模型', width: 220 },
+  { colKey: 'enabled_for_web', title: '网页', width: 70 },
+  { colKey: 'enabled_for_api', title: 'API', width: 70 },
+  { colKey: 'priority', title: '优先级', width: 90 },
+  { colKey: 'weight', title: '权重', width: 70 },
+  { colKey: 'max_concurrency', title: '并发', width: 80 },
+  { colKey: 'rpm_limit', title: 'RPM', width: 80 },
+  { colKey: 'tpm_limit', title: 'TPM', width: 90 },
+  { colKey: 'unit_cost', title: '成本', width: 90 },
   // { colKey: 'use_count', title: '近期用量', width: 350 },
   { colKey: 'access_token_exp', title: 'Access Token 过期时间', width: 200 },
   { colKey: 'created_time', title: '创建时间', width: 200 },
@@ -216,11 +333,41 @@ const createNewChatForm = () => ({
   chatgpt_username: '',
   relay_base_url: '',
   relay_api_key: '',
-  plan_type: 'relay',
+  plan_type: '',
   remark: '',
+  supported_models: [] as string[],
+  priority: 100,
+  weight: 1,
+  health_status: 'healthy',
+  max_concurrency: 1,
+  rpm_limit: 0,
+  tpm_limit: 0,
+  unit_cost: 0,
+  enabled_for_web: true,
+  enabled_for_api: true,
 });
 const newChat = ref(createNewChatForm());
-const editChatInfo = ref({ remark: '', chatgpt_username: '' });
+const editChatInfo = ref({
+  chatgpt_username: '',
+  plan_type: '',
+  remark: '',
+  supported_models: [] as string[],
+  priority: 100,
+  weight: 1,
+  health_status: 'healthy',
+  max_concurrency: 1,
+  rpm_limit: 0,
+  tpm_limit: 0,
+  unit_cost: 0,
+  enabled_for_web: true,
+  enabled_for_api: true,
+});
+const modelOptions = ['gpt-4', 'gpt-4o', 'gpt-4o-mini', 'o1', 'o1-mini', 'o1-pro', 'claude-3-5-sonnet'];
+const healthStatusOptions = [
+  { label: '健康', value: 'healthy' },
+  { label: '降级', value: 'degraded' },
+  { label: '停用', value: 'down' },
+];
 
 const ChatgptTokenUrl = '/0x/chatgpt/';
 
@@ -259,10 +406,32 @@ const addChatToken = async () => {
           relay_api_key: newChat.value.relay_api_key.trim(),
           plan_type: newChat.value.plan_type.trim() || 'relay',
           remark: newChat.value.remark.trim(),
+          supported_models: newChat.value.supported_models,
+          priority: newChat.value.priority,
+          weight: newChat.value.weight,
+          health_status: newChat.value.health_status,
+          max_concurrency: newChat.value.max_concurrency,
+          rpm_limit: newChat.value.rpm_limit,
+          tpm_limit: newChat.value.tpm_limit,
+          unit_cost: newChat.value.unit_cost,
+          enabled_for_web: newChat.value.enabled_for_web,
+          enabled_for_api: newChat.value.enabled_for_api,
         }
       : {
           account_type: newChat.value.account_type,
           chatgpt_token_list: newChat.value.chatgpt_token.split('\n'),
+          plan_type: newChat.value.plan_type.trim(),
+          remark: newChat.value.remark.trim(),
+          supported_models: newChat.value.supported_models,
+          priority: newChat.value.priority,
+          weight: newChat.value.weight,
+          health_status: newChat.value.health_status,
+          max_concurrency: newChat.value.max_concurrency,
+          rpm_limit: newChat.value.rpm_limit,
+          tpm_limit: newChat.value.tpm_limit,
+          unit_cost: newChat.value.unit_cost,
+          enabled_for_web: newChat.value.enabled_for_web,
+          enabled_for_api: newChat.value.enabled_for_api,
         };
 
   const response = await RequestApi(ChatgptTokenUrl, 'POST', payload);
@@ -295,10 +464,27 @@ const formatAuthMode = (authMode: string) => {
 };
 
 const handleEdit = (row: any) => {
-  console.log('row', row.remark);
-  editChatInfo.value = { ...row };
-
+  editChatInfo.value = {
+    chatgpt_username: row.chatgpt_username,
+    plan_type: row.plan_type || '',
+    remark: row.remark || '',
+    supported_models: row.supported_models || [],
+    priority: row.priority ?? 100,
+    weight: row.weight ?? 1,
+    health_status: row.health_status || 'healthy',
+    max_concurrency: row.max_concurrency ?? 1,
+    rpm_limit: row.rpm_limit ?? 0,
+    tpm_limit: row.tpm_limit ?? 0,
+    unit_cost: Number(row.unit_cost ?? 0),
+    enabled_for_web: row.enabled_for_web ?? true,
+    enabled_for_api: row.enabled_for_api ?? true,
+  };
   dialogVisibleEdit.value = true;
+};
+
+const handleShowDialog = () => {
+  newChat.value = createNewChatForm();
+  showDialog.value = true;
 };
 
 const handleClickDelete = (row: any) => {
@@ -342,8 +528,19 @@ const onSelectChange: TableProps['onSelectChange'] = (value, _) => {
 
 const handleEditConfirm = async () => {
   await RequestApi(ChatgptTokenUrl, 'PUT', {
+    plan_type: editChatInfo.value.plan_type,
     remark: editChatInfo.value.remark,
     chatgpt_username: editChatInfo.value.chatgpt_username,
+    supported_models: editChatInfo.value.supported_models,
+    priority: editChatInfo.value.priority,
+    weight: editChatInfo.value.weight,
+    health_status: editChatInfo.value.health_status,
+    max_concurrency: editChatInfo.value.max_concurrency,
+    rpm_limit: editChatInfo.value.rpm_limit,
+    tpm_limit: editChatInfo.value.tpm_limit,
+    unit_cost: editChatInfo.value.unit_cost,
+    enabled_for_web: editChatInfo.value.enabled_for_web,
+    enabled_for_api: editChatInfo.value.enabled_for_api,
   });
   await getChatGPTList();
   MessagePlugin.success('修改成功');

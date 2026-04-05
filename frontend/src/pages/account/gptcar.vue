@@ -60,7 +60,7 @@
             <t-input v-model="newGptCar.car_name" :disabled="actionType == 'edit'" style="width: 240px"></t-input>
           </t-form-item>
 
-          <t-form-item label="选择 ChatGPT" name="gptcar_list">
+          <t-form-item label="选择账号" name="gptcar_list">
             <t-space style="width: 100%">
               <t-select
                 v-model="newGptCar.gpt_account_list"
