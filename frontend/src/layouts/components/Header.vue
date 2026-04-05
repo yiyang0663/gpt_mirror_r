@@ -51,7 +51,6 @@
 </template>
 
 <script setup lang="ts">
-import Cookies from 'js-cookie';
 import { ChevronDownIcon, PoweroffIcon } from 'tdesign-icons-vue-next';
 import type { PropType } from 'vue';
 import { computed } from 'vue';
@@ -137,7 +136,6 @@ const handleNav = (url: string) => {
 
 const handleLogout = async () => {
   await user.logout();
-  Cookies.remove('user_token');
   router.push({
     path: '/login',
     query: { redirect: encodeURIComponent(router.currentRoute.value.fullPath) },
@@ -145,7 +143,7 @@ const handleLogout = async () => {
 };
 
 const goPortal = () => {
-  window.open('/#/customer/home', '_blank', 'noopener,noreferrer');
+  window.open('/#/customer/chat', '_blank', 'noopener,noreferrer');
 };
 
 const navToGitHub = () => {

@@ -17,10 +17,19 @@ router.beforeEach(async (to, from, next) => {
   const { whiteListRouters } = permissionStore;
 
   const userStore = useUserStore();
-  console.log('userStore.token', userStore.is_admin, userStore.token);
+  const isAuthEntryRoute = ['/login', '/register', '/invite_register'].includes(to.path);
+  const authenticatedHomePath = userStore.is_admin ? '/account/user' : '/customer/chat';
+
   if (userStore.token) {
-    if (to.path === '/login') {
-      next();
+    if (isAuthEntryRoute) {
+      const redirectQuery = typeof to.query.redirect === 'string' ? decodeURIComponent(to.query.redirect) : '';
+      const nextPath =
+        redirectQuery && !['/login', '/register', '/invite_register'].includes(redirectQuery)
+          ? redirectQuery
+          : authenticatedHomePath;
+
+      next({ path: nextPath, replace: true });
+      NProgress.done();
       return;
     }
     try {
@@ -63,9 +72,7 @@ router.beforeEach(async (to, from, next) => {
     }
   } else {
     /* white list router */
-    console.log(to.path, whiteListRouters, whiteListRouters.indexOf(to.path));
     if (whiteListRouters.indexOf(to.path) !== -1) {
-      console.log('next ok');
       next();
     } else {
       next({
@@ -77,13 +84,6 @@ router.beforeEach(async (to, from, next) => {
   }
 });
 
-router.afterEach((to) => {
-  if (to.path === '/login') {
-    const userStore = useUserStore();
-    const permissionStore = getPermissionStore();
-
-    userStore.logout();
-    permissionStore.restoreRoutes();
-  }
+router.afterEach(() => {
   NProgress.done();
 });

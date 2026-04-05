@@ -362,7 +362,18 @@ const editChatInfo = ref({
   enabled_for_web: true,
   enabled_for_api: true,
 });
-const modelOptions = ['gpt-4', 'gpt-4o', 'gpt-4o-mini', 'o1', 'o1-mini', 'o1-pro', 'claude-3-5-sonnet'];
+const modelOptions = [
+  'gpt-5.4',
+  'gpt-5.3-codex',
+  'gpt-5.2',
+  'gpt-4',
+  'gpt-4o',
+  'gpt-4o-mini',
+  'o1',
+  'o1-mini',
+  'o1-pro',
+  'claude-3-5-sonnet',
+];
 const healthStatusOptions = [
   { label: '健康', value: 'healthy' },
   { label: '降级', value: 'degraded' },

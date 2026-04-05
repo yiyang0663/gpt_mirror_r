@@ -1,38 +1,58 @@
 <template>
   <div class="customer-shell">
     <aside class="customer-rail">
-      <div class="customer-brand">
-        <div class="brand-mark">
-          <component :is="LogoOpenai" class="brand-logo" />
+      <div class="customer-rail-main">
+        <div class="customer-brand">
+          <div class="brand-mark">
+            <component :is="LogoOpenai" class="brand-logo" />
+          </div>
+          <div>
+            <p class="brand-eyebrow">ChatGPT Mirror</p>
+            <h1 class="brand-title">你的 AI 工作区</h1>
+          </div>
         </div>
-      <div>
-        <p class="brand-eyebrow">ChatGPT Mirror</p>
-        <h1 class="brand-title">对话工作台</h1>
-      </div>
-    </div>
 
-      <nav class="customer-nav">
-        <button
-          v-for="item in navItems"
-          :key="item.name"
-          class="customer-nav-link"
-          :class="{ active: route.name === item.name }"
-          type="button"
-          @click="router.push({ name: item.name })"
-        >
-          <span class="nav-icon" v-html="item.icon"></span>
-          <span>{{ item.label }}</span>
-        </button>
-      </nav>
+        <button class="primary-action" type="button" @click="openChat">新聊天</button>
+
+        <div class="rail-section">
+          <p class="rail-caption">Workspace</p>
+
+          <nav class="customer-nav">
+            <button
+              v-for="item in navItems"
+              :key="item.name"
+              class="customer-nav-link"
+              :class="{ active: route.name === item.name }"
+              type="button"
+              @click="router.push({ name: item.name })"
+            >
+              <span class="nav-icon" v-html="item.icon"></span>
+              <span>{{ item.label }}</span>
+            </button>
+          </nav>
+        </div>
+
+        <div class="rail-note">
+          <p class="rail-note-title">统一账号池已接入</p>
+          <p class="rail-note-copy">用户登录后直接调用后台配置好的官方账号和中转账号，无需再次填写 Token。</p>
+        </div>
+      </div>
 
       <div class="customer-rail-footer">
-        <button class="primary-action" type="button" @click="openChat">开始对话</button>
+        <div class="account-chip">
+          <span class="account-avatar">{{ userInitial }}</span>
+          <div class="account-meta">
+            <strong>{{ displayName }}</strong>
+            <span>{{ isChatRoute ? 'Chat Workspace' : pageMeta.kicker }}</span>
+          </div>
+        </div>
+
         <button class="secondary-action" type="button" @click="handleLogout">退出登录</button>
       </div>
     </aside>
 
-    <main class="customer-main">
-      <header class="customer-topbar">
+    <main class="customer-main" :class="{ 'chat-mode': isChatRoute }">
+      <header v-if="!isChatRoute" class="customer-topbar">
         <div>
           <p class="topbar-kicker">{{ pageMeta.kicker }}</p>
           <h2 class="topbar-title">{{ pageMeta.title }}</h2>
@@ -52,7 +72,6 @@
 </template>
 
 <script setup lang="ts">
-import Cookies from 'js-cookie';
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -62,6 +81,10 @@ import { useUserStore } from '@/store';
 const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
+
+const isChatRoute = computed(() => route.name === 'CustomerChat');
+const displayName = computed(() => userStore.userInfo.name || 'Chat 用户');
+const userInitial = computed(() => displayName.value.trim().charAt(0).toUpperCase() || 'U');
 
 const navItems = [
   {
@@ -106,7 +129,6 @@ const pageMeta = computed(() => {
 
 const handleLogout = async () => {
   await userStore.logout();
-  Cookies.remove('user_token');
   router.push({ name: 'login' });
 };
 </script>
@@ -115,21 +137,27 @@ const handleLogout = async () => {
 .customer-shell {
   display: flex;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, rgba(239, 246, 241, 0.96), rgba(248, 245, 239, 0.96) 36%),
-    linear-gradient(180deg, #f6f3ec 0%, #f4f6f1 100%);
-  color: #17221d;
+  background: #f5f5f2;
+  color: #181818;
 }
 
 .customer-rail {
   display: flex;
-  flex: 0 0 270px;
+  flex: 0 0 284px;
   flex-direction: column;
   justify-content: space-between;
-  padding: 20px 18px;
-  border-right: 1px solid rgba(16, 24, 19, 0.08);
-  background: rgba(250, 249, 245, 0.7);
-  backdrop-filter: blur(18px);
+  gap: 22px;
+  padding: 18px 16px;
+  background:
+    linear-gradient(180deg, rgba(24, 24, 24, 0.98) 0%, rgba(15, 15, 15, 0.98) 100%),
+    #121212;
+  color: #f3f3ef;
+}
+
+.customer-rail-main {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
 .customer-brand {
@@ -145,8 +173,9 @@ const handleLogout = async () => {
   width: 44px;
   height: 44px;
   border-radius: 14px;
-  background: #17221d;
-  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fffef8;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .brand-logo {
@@ -156,7 +185,7 @@ const handleLogout = async () => {
 
 .brand-eyebrow {
   margin: 0 0 4px;
-  color: #708176;
+  color: rgba(244, 244, 239, 0.54);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -165,28 +194,43 @@ const handleLogout = async () => {
 
 .brand-title {
   margin: 0;
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
-  line-height: 1.05;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+
+.rail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rail-caption {
+  margin: 0;
+  color: rgba(244, 244, 239, 0.44);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .customer-nav {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 28px;
+  gap: 6px;
 }
 
 .customer-nav-link {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 48px;
+  min-height: 44px;
   padding: 0 14px;
   border: 1px solid transparent;
-  border-radius: 16px;
+  border-radius: 14px;
   background: transparent;
-  color: #24312a;
+  color: rgba(244, 244, 239, 0.76);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -195,20 +239,41 @@ const handleLogout = async () => {
 
 .customer-nav-link:hover,
 .customer-nav-link.active {
-  border-color: rgba(17, 28, 22, 0.08);
-  background: rgba(255, 255, 255, 0.8);
-  box-shadow: 0 12px 28px rgba(17, 28, 22, 0.06);
+  border-color: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fffef8;
 }
 
 .nav-icon {
   width: 18px;
   height: 18px;
-  color: #5f7165;
+  color: currentColor;
 }
 
 .nav-icon :deep(svg) {
   width: 18px;
   height: 18px;
+}
+
+.rail-note {
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.rail-note-title {
+  margin: 0 0 8px;
+  color: #fffef8;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rail-note-copy {
+  margin: 0;
+  color: rgba(244, 244, 239, 0.68);
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 .customer-rail-footer {
@@ -217,10 +282,50 @@ const handleLogout = async () => {
   gap: 10px;
 }
 
+.account-chip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.account-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fffef8;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.account-meta {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.account-meta strong {
+  color: #fffef8;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.account-meta span {
+  color: rgba(244, 244, 239, 0.52);
+  font-size: 12px;
+}
+
 .primary-action,
 .secondary-action,
 .chat-launch {
-  min-height: 46px;
+  min-height: 44px;
   padding: 0 18px;
   border-radius: 999px;
   font-size: 14px;
@@ -231,16 +336,16 @@ const handleLogout = async () => {
 
 .primary-action,
 .chat-launch {
-  border: none;
-  background: #17221d;
-  color: #fff;
-  box-shadow: 0 18px 36px rgba(23, 34, 29, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #f3f3ef;
+  color: #111;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.18);
 }
 
 .secondary-action {
-  border: 1px solid rgba(23, 34, 29, 0.12);
-  background: rgba(255, 255, 255, 0.68);
-  color: #18251f;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f3f3ef;
 }
 
 .primary-action:hover,
@@ -252,7 +357,11 @@ const handleLogout = async () => {
 .customer-main {
   flex: 1;
   min-width: 0;
-  padding: 20px;
+  padding: 18px 22px;
+}
+
+.customer-main.chat-mode {
+  padding-right: 18px;
 }
 
 .customer-topbar {
@@ -260,12 +369,12 @@ const handleLogout = async () => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 4px 2px 18px;
+  padding: 8px 6px 20px;
 }
 
 .topbar-kicker {
   margin: 0 0 6px;
-  color: #738176;
+  color: #80807b;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -277,6 +386,7 @@ const handleLogout = async () => {
   font-size: clamp(28px, 4vw, 42px);
   font-weight: 700;
   line-height: 1.02;
+  letter-spacing: -0.04em;
 }
 
 .chat-arrow {
@@ -286,6 +396,7 @@ const handleLogout = async () => {
 
 .customer-stage {
   min-width: 0;
+  min-height: calc(100vh - 36px);
 }
 
 @media (max-width: 960px) {
@@ -296,17 +407,16 @@ const handleLogout = async () => {
   .customer-rail {
     flex: none;
     gap: 18px;
-    border-right: none;
-    border-bottom: 1px solid rgba(16, 24, 19, 0.08);
   }
 
   .customer-nav {
     flex-direction: row;
-    margin-top: 0;
+    overflow-x: auto;
   }
 
   .customer-rail-footer {
     flex-direction: row;
+    align-items: center;
   }
 
   .customer-topbar {
@@ -317,7 +427,15 @@ const handleLogout = async () => {
 
 @media (max-width: 640px) {
   .customer-main {
-    padding: 16px;
+    padding: 14px;
+  }
+
+  .customer-main.chat-mode {
+    padding-right: 14px;
+  }
+
+  .customer-rail {
+    padding: 14px;
   }
 
   .customer-nav {
@@ -326,11 +444,13 @@ const handleLogout = async () => {
 
   .customer-rail-footer {
     flex-direction: column;
+    align-items: stretch;
   }
 
   .chat-launch,
   .primary-action,
-  .secondary-action {
+  .secondary-action,
+  .account-chip {
     width: 100%;
   }
 }

@@ -60,10 +60,12 @@
 
     <main class="entry-main">
       <div class="topbar">
-        <button class="model-switch" type="button" @click="openPanel('login')">
-          ChatGPT
-          <span class="icon-wrap tiny-icon" v-html="getIcon('chevron')"></span>
-        </button>
+        <label class="model-switch">
+          <span class="model-switch-label">ChatGPT</span>
+          <select v-model="landingModel" class="model-switch-select">
+            <option v-for="item in landingModelOptions" :key="item" :value="item">{{ item }}</option>
+          </select>
+        </label>
 
         <div class="topbar-actions">
           <button class="topbar-login" type="button" @click="openPanel('login')">登录</button>
@@ -74,14 +76,25 @@
       <section class="hero">
         <h1 class="hero-title">你今天在想些什么？</h1>
 
-        <button class="prompt-bar" type="button" @click="openPanel('login')">
-          <span class="prompt-leading icon-wrap" v-html="getIcon('plus')"></span>
-          <span class="prompt-text">有问题，尽管问</span>
-          <span class="prompt-audio">
-            <span class="icon-wrap tiny-icon" v-html="getIcon('audio')"></span>
-            语音
-          </span>
-        </button>
+        <form class="prompt-bar" @submit.prevent="submitLandingPrompt">
+          <div class="prompt-main">
+            <span class="prompt-leading icon-wrap" v-html="getIcon('plus')"></span>
+            <textarea
+              v-model="landingDraft"
+              class="prompt-input"
+              rows="1"
+              placeholder="有问题，尽管问"
+              @keydown="handleLandingComposerKeydown"
+            ></textarea>
+          </div>
+
+          <div class="prompt-actions">
+            <span class="prompt-model-chip">{{ landingModel }}</span>
+            <button class="prompt-send" type="submit" :disabled="!landingDraft.trim()">
+              <span class="icon-wrap tiny-icon" v-html="getIcon('arrowUp')"></span>
+            </button>
+          </div>
+        </form>
 
         <p class="hero-footnote">
           向 AI 聊天机器人 ChatGPT 发送消息即表示，你同意我们的
@@ -174,6 +187,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 import LogoOpenai from '@/assets/openai-logo.svg';
 import { useUserStore } from '@/store';
+import { defaultConsumerModels, saveConsumerComposeState } from '@/utils/direct-chat';
 
 type PanelMode = 'login' | 'register' | null;
 
@@ -204,6 +218,8 @@ const iconMarkup: Record<string, string> = {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>',
   audio:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v12"></path><path d="M8.5 9v6"></path><path d="M15.5 9v6"></path><path d="M5 11v2"></path><path d="M19 11v2"></path></svg>',
+  arrowUp:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 5 5 5"></path><path d="m12 5-5 5"></path><path d="M12 5v14"></path></svg>',
 };
 
 const primaryNav = [
@@ -228,6 +244,9 @@ const router = useRouter();
 const loading = ref(false);
 const panelMode = ref<PanelMode>(null);
 const cfg = ref({ show_github: false, notice: '', allow_free_login: false });
+const landingDraft = ref('');
+const landingModel = ref(defaultConsumerModels[0] || 'gpt-5.4');
+const landingModelOptions = defaultConsumerModels;
 
 const loginForm = reactive({
   username: '',
@@ -282,6 +301,37 @@ const openPanel = async (mode: Exclude<PanelMode, null>) => {
   await switchPanel(mode);
 };
 
+const forwardLandingPrompt = async () => {
+  const prompt = landingDraft.value.trim();
+  if (!prompt) {
+    return;
+  }
+
+  saveConsumerComposeState({
+    prompt,
+    model: landingModel.value,
+  });
+
+  if (userStore.token) {
+    await router.push({ name: 'CustomerChat' });
+    return;
+  }
+
+  await openPanel('login');
+};
+
+const submitLandingPrompt = async () => {
+  await forwardLandingPrompt();
+};
+
+const handleLandingComposerKeydown = async (event: KeyboardEvent) => {
+  if (event.key !== 'Enter' || event.shiftKey || event.isComposing) {
+    return;
+  }
+  event.preventDefault();
+  await forwardLandingPrompt();
+};
+
 const closePanel = async () => {
   panelMode.value = null;
   if (route.path !== '/login') {
@@ -312,7 +362,7 @@ const onSubmit: FormProps['onSubmit'] = async ({ validateResult, firstError }) =
     return;
   }
   if (data?.admin_token) {
-    router.push({ name: 'CustomerChat' });
+    await router.push({ name: 'CustomerChat' });
     return;
   }
 
@@ -524,16 +574,27 @@ const getVersionCfg = async () => {
 }
 
 .model-switch {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 0;
-  border: none;
-  background: transparent;
+  gap: 10px;
+}
+
+.model-switch-label {
   color: #1e1e1e;
   font-size: 32px;
   font-weight: 700;
-  cursor: pointer;
+  letter-spacing: -0.04em;
+}
+
+.model-switch-select {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid rgba(17, 17, 17, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #111;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .topbar-actions {
@@ -583,19 +644,17 @@ const getVersionCfg = async () => {
 
 .prompt-bar {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  flex-direction: column;
   width: min(700px, calc(100vw - 340px));
-  min-height: 58px;
-  padding: 10px 12px 10px 16px;
+  min-height: 124px;
+  padding: 14px 16px;
   border: 1px solid rgba(17, 17, 17, 0.08);
-  border-radius: 999px;
+  border-radius: 28px;
   background: rgba(255, 255, 255, 0.98);
   box-shadow:
     0 18px 48px rgba(17, 17, 17, 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.7);
   color: #555;
-  cursor: pointer;
   transition:
     transform 180ms ease,
     box-shadow 180ms ease,
@@ -608,15 +667,66 @@ const getVersionCfg = async () => {
   box-shadow: 0 22px 56px rgba(17, 17, 17, 0.08);
 }
 
-.prompt-leading {
-  color: #4a4a4a;
+.prompt-main {
+  display: flex;
+  gap: 14px;
+  width: 100%;
+  min-height: 58px;
 }
 
-.prompt-text {
+.prompt-leading {
+  color: #4a4a4a;
+  margin-top: 4px;
+}
+
+.prompt-input {
   flex: 1;
+  border: none;
+  background: transparent;
   color: #666;
   font-size: 18px;
-  text-align: left;
+  line-height: 1.6;
+  resize: none;
+  outline: none;
+}
+
+.prompt-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.prompt-model-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(17, 17, 17, 0.05);
+  color: #444;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.prompt-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: #111;
+  color: #fff;
+  cursor: pointer;
+}
+
+.prompt-send:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
 }
 
 .prompt-audio {
@@ -842,6 +952,12 @@ const getVersionCfg = async () => {
   }
 
   .model-switch {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .model-switch-label {
     font-size: 24px;
   }
 
@@ -861,17 +977,12 @@ const getVersionCfg = async () => {
   }
 
   .prompt-bar {
-    min-height: 54px;
-    padding: 8px 10px 8px 14px;
+    min-height: 112px;
+    padding: 12px 14px;
   }
 
-  .prompt-text {
+  .prompt-input {
     font-size: 16px;
-  }
-
-  .prompt-audio {
-    padding: 9px 12px;
-    font-size: 14px;
   }
 
   .auth-panel {

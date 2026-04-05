@@ -30,7 +30,7 @@ function filterPermissionsRouters(routes: Array<RouteRecordRaw>, roles: Array<un
 
 export const usePermissionStore = defineStore('permission', {
   state: () => ({
-    whiteListRouters: ['/login', '/register'],
+    whiteListRouters: ['/login', '/register', '/invite_register', '/login-chatgpt'],
     routers: [],
     removeRoutes: [],
   }),

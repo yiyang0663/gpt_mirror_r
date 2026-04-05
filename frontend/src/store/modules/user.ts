@@ -12,7 +12,7 @@ const InitUserInfo: UserInfo = {
 
 export const useUserStore = defineStore('user', {
   state: () => ({
-    token: 'main_token', // 默认token不走权限
+    token: '',
     is_admin: false,
     userInfo: { ...InitUserInfo },
   }),
@@ -50,9 +50,12 @@ export const useUserStore = defineStore('user', {
     },
 
     async logout() {
+      const permissionStore = usePermissionStore();
       this.token = '';
       this.is_admin = false;
       this.userInfo = { ...InitUserInfo };
+      Cookies.remove('user_token');
+      await permissionStore.restoreRoutes();
     },
   },
   persist: {
@@ -61,6 +64,6 @@ export const useUserStore = defineStore('user', {
       permissionStore.initRoutes();
     },
     key: 'user',
-    paths: ['token'],
+    paths: ['token', 'is_admin'],
   },
 });

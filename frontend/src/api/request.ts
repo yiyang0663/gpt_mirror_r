@@ -1,13 +1,12 @@
 // eslint-disable-next-line simple-import-sort/imports
 import { MessagePlugin } from 'tdesign-vue-next';
-import { useRouter } from 'vue-router';
+
+import router from '@/router';
 import { useUserStore } from '@/store';
 
 const RequestApi = async (url: string, method = 'GET', body: any = undefined) => {
   const userStore = useUserStore();
   const { token } = userStore;
-
-  const router = useRouter();
   const defaultHeaders = {
     'Content-Type': 'application/json',
     Authorization: `token ${token}`,
@@ -20,11 +19,13 @@ const RequestApi = async (url: string, method = 'GET', body: any = undefined) =>
   });
 
   if (response.status === 401) {
+    await userStore.logout();
     router.push({ name: 'login' });
     return new Response();
   }
 
   if (response.status === 403) {
+    await userStore.logout();
     router.push({ name: 'login' });
     return new Response();
   }

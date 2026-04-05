@@ -23,9 +23,18 @@ export interface ConsumerChatEntry {
   source_type: string;
 }
 
-export const defaultConsumerModels = ['gpt-4o-mini', 'gpt-4o', 'gpt-4'];
+interface ConsumerComposeState {
+  prompt: string;
+  model: string;
+}
+
+const CONSUMER_COMPOSE_STATE_KEY = 'consumer_compose_state';
+
+export const defaultConsumerModels = ['gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2'];
 
 const redirectToLogin = () => {
+  const userStore = useUserStore();
+  void userStore.logout();
   window.location.hash = '#/login';
 };
 
@@ -110,6 +119,49 @@ export const getConsumerChatEntry = async (model = ''): Promise<ConsumerChatEntr
     account_type: activeItem.account_type || '',
     source_type: activeItem.source_type || '',
   };
+};
+
+export const saveConsumerComposeState = (payload: ConsumerComposeState) => {
+  if (typeof window === 'undefined') return;
+
+  const prompt = String(payload.prompt || '').trim();
+  const model = String(payload.model || '').trim();
+  if (!prompt) {
+    window.sessionStorage.removeItem(CONSUMER_COMPOSE_STATE_KEY);
+    return;
+  }
+
+  window.sessionStorage.setItem(
+    CONSUMER_COMPOSE_STATE_KEY,
+    JSON.stringify({
+      prompt,
+      model,
+    }),
+  );
+};
+
+export const consumeConsumerComposeState = (): ConsumerComposeState | null => {
+  if (typeof window === 'undefined') return null;
+
+  const rawValue = window.sessionStorage.getItem(CONSUMER_COMPOSE_STATE_KEY);
+  if (!rawValue) return null;
+
+  window.sessionStorage.removeItem(CONSUMER_COMPOSE_STATE_KEY);
+  try {
+    const parsed = JSON.parse(rawValue) as Partial<ConsumerComposeState>;
+    const prompt = String(parsed.prompt || '').trim();
+    const model = String(parsed.model || '').trim();
+    if (!prompt) {
+      return null;
+    }
+    return {
+      prompt,
+      model,
+    };
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
 };
 
 export const redirectToConsumerChat = async () => {
