@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 from django.db.models import Count, DecimalField, Q, Sum, Value
 from django.db.models.functions import Coalesce
@@ -66,8 +67,9 @@ def build_usage_summary(queryset):
         completion_tokens=Coalesce(Sum("completion_tokens"), 0),
         total_tokens=Coalesce(Sum("total_tokens"), 0),
         estimated_cost=Coalesce(
-            Sum("estimated_cost"),
-            Value(0, output_field=DecimalField(max_digits=12, decimal_places=6)),
+            Sum("estimated_cost", output_field=DecimalField(max_digits=12, decimal_places=6)),
+            Value(Decimal("0.000000"), output_field=DecimalField(max_digits=12, decimal_places=6)),
+            output_field=DecimalField(max_digits=12, decimal_places=6),
         ),
     )
     summary["estimated_cost"] = float(summary["estimated_cost"] or 0)
