@@ -181,10 +181,10 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 
 import RequestApi from '@/api/request';
 import { TimestampToDate } from '@/utils/date';
-import { redirectToConsumerChat } from '@/utils/direct-chat';
 
 interface QuotaRuleStatus {
   rule_id: number;
@@ -298,6 +298,7 @@ const profile = ref<ProfileData>({
   date_joined: '',
   last_login: null,
 });
+const router = useRouter();
 const usageSummary = ref<UsageSummary>({
   recent_records: [],
 });
@@ -397,7 +398,7 @@ const getSessionSummary = async () => {
 };
 
 const handleOpenChat = async () => {
-  await redirectToConsumerChat();
+  await router.push({ name: 'CustomerChat' });
 };
 
 onMounted(async () => {

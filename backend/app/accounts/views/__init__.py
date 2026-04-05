@@ -109,9 +109,11 @@ class GetMirrorToken(APIView):
                     "chatgpt_username": account.chatgpt_username,
                     "mirror_token": proxy_token,
                     "proxy_mirror_token": proxy_token,
+                    "web_proxy_token": build_relay_mirror_token(user.id, account.id, channel="web"),
                     "auth_status": account.auth_status,
                     "plan_type": account.plan_type,
                     "account_type": account.account_type,
+                    "source_type": account.source_type,
                 })
                 continue
 
@@ -121,9 +123,11 @@ class GetMirrorToken(APIView):
                 "chatgpt_username": account.chatgpt_username,
                 "mirror_token": gateway_item.get("mirror_token", ""),
                 "proxy_mirror_token": build_account_proxy_token(user.id, account.id),
+                "web_proxy_token": build_account_proxy_token(user.id, account.id, channel="web"),
                 "auth_status": gateway_item.get("auth_status", account.auth_status),
                 "plan_type": account.plan_type,
                 "account_type": account.account_type,
+                "source_type": account.source_type,
             })
         return Response(res)
 

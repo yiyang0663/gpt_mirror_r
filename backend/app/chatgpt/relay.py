@@ -12,22 +12,32 @@ from app.utils import req_gateway
 
 RELAY_MIRROR_TOKEN_SALT = "relay-mirror-token"
 ACCOUNT_PROXY_TOKEN_SALT = "account-proxy-token"
+SUPPORTED_PROXY_CHANNELS = {"api", "web"}
 
 
-def build_relay_mirror_token(user_id, chatgpt_id):
+def normalize_proxy_channel(channel):
+    normalized = str(channel or "").strip().lower()
+    if normalized in SUPPORTED_PROXY_CHANNELS:
+        return normalized
+    return "api"
+
+
+def build_relay_mirror_token(user_id, chatgpt_id, channel="api"):
     payload = {
         "type": "relay_api",
         "user_id": user_id,
         "chatgpt_id": chatgpt_id,
+        "channel": normalize_proxy_channel(channel),
     }
     return signing.dumps(payload, salt=RELAY_MIRROR_TOKEN_SALT)
 
 
-def build_account_proxy_token(user_id, chatgpt_id):
+def build_account_proxy_token(user_id, chatgpt_id, channel="api"):
     payload = {
         "type": "account_proxy",
         "user_id": user_id,
         "chatgpt_id": chatgpt_id,
+        "channel": normalize_proxy_channel(channel),
     }
     return signing.dumps(payload, salt=ACCOUNT_PROXY_TOKEN_SALT)
 
@@ -53,6 +63,7 @@ def resolve_proxy_mirror_token(token, model_name=""):
 
     user_id = payload.get("user_id")
     chatgpt_id = payload.get("chatgpt_id")
+    channel = normalize_proxy_channel(payload.get("channel"))
     if not isinstance(user_id, int) or not isinstance(chatgpt_id, int):
         return None
 
@@ -63,7 +74,7 @@ def resolve_proxy_mirror_token(token, model_name=""):
 
     selected_account = select_dispatch_account(
         user,
-        channel="api",
+        channel=channel,
         model_name=model_name,
         requested_account_id=chatgpt_id,
         entrypoint="api_proxy",
@@ -77,7 +88,12 @@ def resolve_proxy_mirror_token(token, model_name=""):
     if proxy_type == "account_proxy" and selected_account.is_relay_account:
         raise PermissionError("当前官方代理通道不可用")
 
-    return {"user": user, "account": selected_account, "proxy_type": proxy_type}
+    return {
+        "user": user,
+        "account": selected_account,
+        "proxy_type": proxy_type,
+        "channel": channel,
+    }
 
 
 def resolve_relay_mirror_token(token, model_name=""):

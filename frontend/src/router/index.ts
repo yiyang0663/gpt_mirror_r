@@ -34,8 +34,13 @@ const defaultRouterList: Array<RouteRecordRaw> = [
   {
     path: '/customer',
     component: () => import('@/pages/customer/layout.vue'),
-    redirect: '/customer/home',
+    redirect: '/customer/chat',
     children: [
+      {
+        path: 'chat',
+        name: 'CustomerChat',
+        component: () => import('@/pages/customer/chat.vue'),
+      },
       {
         path: 'home',
         name: 'CustomerHome',

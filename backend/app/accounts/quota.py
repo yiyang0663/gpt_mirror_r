@@ -4,7 +4,7 @@ from django.utils import timezone
 
 from app.accounts.gateway_usage import get_synced_gateway_monthly_request_count, sync_gateway_daily_usage_for_user
 from app.accounts.models import GatewayUserDailyUsage, QuotaRule, ServicePlan, UserSubscription
-from app.chatgpt.models import UsageLedger
+from app.chatgpt.models import ChatgptAccount, UsageLedger
 
 
 def normalize_model_name(model_name):
@@ -152,20 +152,31 @@ def get_applicable_quota_rules(plan, channel="api", model_name=""):
 def get_rule_usage(user, rule, channel="api", gateway_daily_request_count=None, gateway_monthly_request_count=None):
     usage_source = "ledger"
     usage_note = ""
+    relay_request_count = 0
+
+    if channel == "web" and rule.request_limit and not rule.model_name:
+        relay_request_count = UsageLedger.objects.filter(
+            user=user,
+            account__source_type=ChatgptAccount.SOURCE_TYPE_RELAY,
+            request_type="web.chat.completions",
+            status_code__gte=200,
+            status_code__lt=400,
+            created_at__gte=get_rule_window_start(rule.period),
+        ).count()
 
     if channel == "web" and rule.period == QuotaRule.PERIOD_DAILY and rule.request_limit and not rule.model_name:
         return {
-            "request_count": int(gateway_daily_request_count or 0),
+            "request_count": int(gateway_daily_request_count or 0) + relay_request_count,
             "total_tokens": 0,
-            "usage_source": "gateway_daily_requests",
-            "usage_note": "网页全部模型的每日请求次数按 gateway 当日用量统计",
+            "usage_source": "gateway_daily_requests_plus_relay",
+            "usage_note": "网页全部模型的每日请求次数按 gateway 当日用量 + relay 直连网页请求统计",
         }
     if channel == "web" and rule.period == QuotaRule.PERIOD_MONTHLY and rule.request_limit and not rule.model_name:
         return {
-            "request_count": int(gateway_monthly_request_count or 0),
+            "request_count": int(gateway_monthly_request_count or 0) + relay_request_count,
             "total_tokens": 0,
-            "usage_source": "gateway_monthly_snapshots",
-            "usage_note": "网页全部模型的每月请求次数按站内同步的 gateway 日快照累计",
+            "usage_source": "gateway_monthly_snapshots_plus_relay",
+            "usage_note": "网页全部模型的每月请求次数按 gateway 快照累计 + relay 直连网页请求统计",
         }
 
     queryset = UsageLedger.objects.filter(

@@ -5,11 +5,11 @@
         <div class="brand-mark">
           <component :is="LogoOpenai" class="brand-logo" />
         </div>
-        <div>
-          <p class="brand-eyebrow">ChatGPT Mirror</p>
-          <h1 class="brand-title">用户中心</h1>
-        </div>
+      <div>
+        <p class="brand-eyebrow">ChatGPT Mirror</p>
+        <h1 class="brand-title">对话工作台</h1>
       </div>
+    </div>
 
       <nav class="customer-nav">
         <button
@@ -34,12 +34,12 @@
     <main class="customer-main">
       <header class="customer-topbar">
         <div>
-          <p class="topbar-kicker">{{ route.name === 'CustomerAccount' ? 'Account' : 'Workspace' }}</p>
-          <h2 class="topbar-title">{{ route.name === 'CustomerAccount' ? '账户与套餐' : '欢迎回来' }}</h2>
+          <p class="topbar-kicker">{{ pageMeta.kicker }}</p>
+          <h2 class="topbar-title">{{ pageMeta.title }}</h2>
         </div>
 
         <button class="chat-launch" type="button" @click="openChat">
-          进入对话
+          新对话
           <span class="chat-arrow">↗</span>
         </button>
       </header>
@@ -53,17 +53,22 @@
 
 <script setup lang="ts">
 import Cookies from 'js-cookie';
+import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
 import LogoOpenai from '@/assets/openai-logo.svg';
 import { useUserStore } from '@/store';
-import { redirectToConsumerChat } from '@/utils/direct-chat';
 
 const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
 
 const navItems = [
+  {
+    name: 'CustomerChat',
+    label: '对话',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v7A2.5 2.5 0 0 1 16.5 16H11l-4.2 3.5c-.8.6-1.8 0-1.8-1V16.2A2.5 2.5 0 0 1 4 14V6.5Z"></path></svg>',
+  },
   {
     name: 'CustomerHome',
     label: '总览',
@@ -77,8 +82,27 @@ const navItems = [
 ];
 
 const openChat = async () => {
-  await redirectToConsumerChat();
+  await router.push({ name: 'CustomerChat' });
 };
+
+const pageMeta = computed(() => {
+  if (route.name === 'CustomerAccount') {
+    return {
+      kicker: 'Account',
+      title: '账户与套餐',
+    };
+  }
+  if (route.name === 'CustomerHome') {
+    return {
+      kicker: 'Overview',
+      title: '接入总览',
+    };
+  }
+  return {
+    kicker: 'Workspace',
+    title: '直接开始对话',
+  };
+});
 
 const handleLogout = async () => {
   await userStore.logout();

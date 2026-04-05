@@ -207,7 +207,6 @@ import { useRouter } from 'vue-router';
 
 import RequestApi from '@/api/request';
 import { TimestampToDate } from '@/utils/date';
-import { redirectToConsumerChat } from '@/utils/direct-chat';
 
 interface QuotaRuleStatus {
   rule_id: number;
@@ -447,7 +446,7 @@ const getSessionSummary = async () => {
 };
 
 const handleOpenChat = async () => {
-  await redirectToConsumerChat();
+  await router.push({ name: 'CustomerChat' });
 };
 
 onMounted(async () => {

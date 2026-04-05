@@ -312,7 +312,7 @@ const onSubmit: FormProps['onSubmit'] = async ({ validateResult, firstError }) =
     return;
   }
   if (data?.admin_token) {
-    router.push({ name: 'CustomerHome' });
+    router.push({ name: 'CustomerChat' });
     return;
   }
 

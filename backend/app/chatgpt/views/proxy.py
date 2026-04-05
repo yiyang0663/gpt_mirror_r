@@ -110,19 +110,23 @@ class ChatCompletionsProxyView(APIView):
         request_stream = is_stream_request(request_body)
         request_model = self._extract_request_model(request_body)
         proxy_context = None
+        proxy_channel = "api"
+        request_type = "chat.completions"
         try:
             proxy_context = resolve_proxy_mirror_token(bearer_token, model_name=request_model)
         except PermissionError as exc:
             return JsonResponse({"message": str(exc)}, status=403)
 
         if proxy_context:
-            quota_status = build_user_quota_status(proxy_context["user"], channel="api", model_name=request_model)
+            proxy_channel = proxy_context.get("channel") or "api"
+            request_type = "web.chat.completions" if proxy_channel == "web" else "chat.completions"
+            quota_status = build_user_quota_status(proxy_context["user"], channel=proxy_channel, model_name=request_model)
             if not quota_status["allowed"]:
                 save_usage_ledger(
                     user=proxy_context["user"],
                     account=proxy_context["account"],
                     model_name=request_model,
-                    request_type="chat.completions",
+                    request_type=request_type,
                     status_code=429,
                     response_body=b"",
                     is_stream=False,
@@ -158,7 +162,7 @@ class ChatCompletionsProxyView(APIView):
                     user=proxy_context["user"],
                     account=proxy_context["account"],
                     model_name=request_model,
-                    request_type="chat.completions",
+                    request_type=request_type,
                     status_code=502,
                     response_body=b"",
                     is_stream=False,
@@ -171,5 +175,5 @@ class ChatCompletionsProxyView(APIView):
             request_stream,
             usage_context=proxy_context,
             request_model=request_model,
-            request_type="chat.completions",
+            request_type=request_type,
         )
