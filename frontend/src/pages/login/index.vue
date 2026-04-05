@@ -302,6 +302,7 @@ const openPanel = async (mode: Exclude<PanelMode, null>) => {
 };
 
 const forwardLandingPrompt = async () => {
+  userStore.hydrateAuthState();
   const prompt = landingDraft.value.trim();
   if (!prompt) {
     return;

@@ -6,10 +6,11 @@ import { useUserStore } from '@/store';
 
 const RequestApi = async (url: string, method = 'GET', body: any = undefined) => {
   const userStore = useUserStore();
+  userStore.hydrateAuthState();
   const { token } = userStore;
   const defaultHeaders = {
     'Content-Type': 'application/json',
-    Authorization: `token ${token}`,
+    Authorization: `Token ${token}`,
   };
 
   const response = await fetch(url, {
@@ -20,13 +21,19 @@ const RequestApi = async (url: string, method = 'GET', body: any = undefined) =>
 
   if (response.status === 401) {
     await userStore.logout();
-    router.push({ name: 'login' });
+    router.push({
+      path: '/login',
+      query: { redirect: encodeURIComponent(router.currentRoute.value.fullPath) },
+    });
     return new Response();
   }
 
   if (response.status === 403) {
     await userStore.logout();
-    router.push({ name: 'login' });
+    router.push({
+      path: '/login',
+      query: { redirect: encodeURIComponent(router.currentRoute.value.fullPath) },
+    });
     return new Response();
   }
 

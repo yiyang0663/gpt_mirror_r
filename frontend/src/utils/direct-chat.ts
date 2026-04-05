@@ -35,14 +35,15 @@ export const defaultConsumerModels = ['gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2'];
 const redirectToLogin = () => {
   const userStore = useUserStore();
   void userStore.logout();
-  window.location.hash = '#/login';
+  window.location.hash = '#/login?redirect=%2Fcustomer%2Fchat';
 };
 
 const buildAuthorizedHeaders = () => {
   const userStore = useUserStore();
+  userStore.hydrateAuthState();
   return {
     'Content-Type': 'application/json',
-    Authorization: `token ${userStore.token}`,
+    Authorization: `Token ${userStore.token}`,
   };
 };
 

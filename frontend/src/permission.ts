@@ -17,6 +17,7 @@ router.beforeEach(async (to, from, next) => {
   const { whiteListRouters } = permissionStore;
 
   const userStore = useUserStore();
+  userStore.hydrateAuthState();
   const isAuthEntryRoute = ['/login', '/register', '/invite_register'].includes(to.path);
   const authenticatedHomePath = userStore.is_admin ? '/account/user' : '/customer/chat';
 

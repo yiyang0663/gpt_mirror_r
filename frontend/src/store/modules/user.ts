@@ -10,10 +10,17 @@ const InitUserInfo: UserInfo = {
   roles: [], // 前端权限模型使用 如果使用请配置modules/permission-fe.ts使用
 };
 
+const TOKEN_COOKIE_KEY = 'user_token';
+const ADMIN_COOKIE_KEY = 'user_is_admin';
+
+const readTokenCookie = () => Cookies.get(TOKEN_COOKIE_KEY) || '';
+
+const readAdminCookie = () => Cookies.get(ADMIN_COOKIE_KEY) === '1';
+
 export const useUserStore = defineStore('user', {
   state: () => ({
-    token: '',
-    is_admin: false,
+    token: readTokenCookie(),
+    is_admin: readAdminCookie(),
     userInfo: { ...InitUserInfo },
   }),
   getters: {
@@ -22,6 +29,17 @@ export const useUserStore = defineStore('user', {
     },
   },
   actions: {
+    hydrateAuthState() {
+      const cookieToken = readTokenCookie();
+      if (!this.token && cookieToken) {
+        this.token = cookieToken;
+      }
+
+      if (!this.is_admin && readAdminCookie()) {
+        this.is_admin = true;
+      }
+    },
+
     async login(url: string, userInfo: Record<string, unknown>) {
       const response = await fetch(url, {
         method: 'POST',
@@ -34,8 +52,9 @@ export const useUserStore = defineStore('user', {
       if (response.status === 200) {
         data = await response.json();
         this.token = data.admin_token;
-        this.is_admin = data.is_admin;
-        Cookies.set('user_token', data.admin_token, { expires: 7 });
+        this.is_admin = data.is_admin === true;
+        Cookies.set(TOKEN_COOKIE_KEY, data.admin_token, { expires: 7, path: '/' });
+        Cookies.set(ADMIN_COOKIE_KEY, this.is_admin ? '1' : '0', { expires: 7, path: '/' });
         MessagePlugin.success('登录成功');
       } else if (response.status === 400) {
         data = await response.json();
@@ -54,12 +73,15 @@ export const useUserStore = defineStore('user', {
       this.token = '';
       this.is_admin = false;
       this.userInfo = { ...InitUserInfo };
-      Cookies.remove('user_token');
+      Cookies.remove(TOKEN_COOKIE_KEY, { path: '/' });
+      Cookies.remove(ADMIN_COOKIE_KEY, { path: '/' });
       await permissionStore.restoreRoutes();
     },
   },
   persist: {
-    afterRestore: () => {
+    afterRestore: (context) => {
+      const userStore = context.store as ReturnType<typeof useUserStore>;
+      userStore.hydrateAuthState();
       const permissionStore = usePermissionStore();
       permissionStore.initRoutes();
     },
