@@ -17,7 +17,6 @@
       <div class="empty-copy">
         <p class="empty-kicker">ChatGPT</p>
         <h1 class="empty-title">有什么可以帮忙的？</h1>
-        <p class="empty-note">登录后直接使用站点已配置的账号池，无需再填写任何 Token。</p>
       </div>
 
       <section class="composer-panel composer-panel-empty">

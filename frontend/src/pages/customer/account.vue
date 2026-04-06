@@ -85,69 +85,6 @@
       </article>
     </section>
 
-    <section class="access-panel">
-      <div class="section-head">
-        <div>
-          <p class="section-kicker">Session</p>
-          <h2 class="section-title">接入会话</h2>
-        </div>
-        <button class="chat-link" type="button" @click="handleOpenChat">开始新对话</button>
-      </div>
-
-      <div class="access-grid">
-        <article class="access-card">
-          <p class="access-label">入口状态</p>
-          <div class="access-matrix">
-            <div class="access-stat">
-              <span>网页入口</span>
-              <strong>{{ sessionSummary.available ? '可用' : '受限' }}</strong>
-            </div>
-            <div class="access-stat">
-              <span>API 通道</span>
-              <strong>{{ sessionSummary.api_quota_status.allowed ? '可用' : '受限' }}</strong>
-            </div>
-            <div class="access-stat">
-              <span>推荐账号</span>
-              <strong>{{ sessionSummary.recommended_account?.chatgpt_username || '暂未分配' }}</strong>
-            </div>
-            <div class="access-stat">
-              <span>网页候选</span>
-              <strong>{{ sessionSummary.available_accounts.web_candidates || 0 }}</strong>
-            </div>
-          </div>
-        </article>
-
-        <article class="access-card">
-          <p class="access-label">号池与模型</p>
-          <div v-if="sessionSummary.bound_pools.length" class="chip-list">
-            <span v-for="pool in sessionSummary.bound_pools" :key="pool.id" class="chip">
-              {{ pool.car_name }} · {{ pool.account_count }} 个账号
-            </span>
-          </div>
-          <p v-else class="empty-copy">当前使用站点公共账号池。</p>
-
-          <div class="chip-list">
-            <span v-for="item in sessionSummary.supported_models" :key="item" class="chip chip-model">{{ item }}</span>
-            <span v-if="!sessionSummary.supported_models.length" class="empty-copy">当前未设置显式模型白名单。</span>
-          </div>
-
-          <div v-if="recentDispatches.length" class="dispatch-list">
-            <div v-for="item in recentDispatches" :key="item.id" class="dispatch-row">
-              <div>
-                <p class="dispatch-title">{{ formatEntrypoint(item.entrypoint) }}</p>
-                <p class="dispatch-meta">
-                  {{ item.account?.chatgpt_username || '未命中账号' }} · {{ TimestampToDate(item.created_time * 1000) }}
-                </p>
-              </div>
-              <span class="dispatch-tag" :class="item.decision_status === 'selected' ? 'success' : 'warn'">
-                {{ formatDecisionStatus(item.decision_status) }}
-              </span>
-            </div>
-          </div>
-        </article>
-      </div>
-    </section>
-
     <section class="records-panel">
       <div class="section-head">
         <div>
@@ -181,7 +118,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
 
 import RequestApi from '@/api/request';
 import { TimestampToDate } from '@/utils/date';
@@ -236,54 +172,13 @@ interface UsageSummary {
   recent_records: UsageRecord[];
 }
 
-interface SessionBoundPool {
-  id: number;
-  car_name: string;
-  account_count: number;
-}
-
-interface SessionAccount {
-  id: number;
-  chatgpt_username: string;
-  account_type: string;
-  source_type: string;
-  health_status: string;
-  plan_type: string;
-}
-
-interface SessionDispatch {
-  id: number;
-  entrypoint: string;
-  channel: string;
-  model_name: string;
-  decision_status: string;
-  reason: string;
-  created_time: number;
-  candidate_count: number;
-  account: SessionAccount | null;
-}
-
 interface SessionSummary {
   available: boolean;
   reason: string;
   pool_mode: string;
   isolated_session: boolean;
-  bound_pools: SessionBoundPool[];
   web_quota_status: SessionQuotaStatus;
   api_quota_status: SessionQuotaStatus;
-  available_accounts: {
-    web_total: number;
-    api_total: number;
-    web_official: number;
-    web_relay: number;
-    api_official: number;
-    api_relay: number;
-    web_candidates: number;
-    api_candidates: number;
-  };
-  supported_models: string[];
-  recommended_account: SessionAccount | null;
-  recent_dispatches: SessionDispatch[];
 }
 
 const profile = ref<ProfileData>({
@@ -298,7 +193,6 @@ const profile = ref<ProfileData>({
   date_joined: '',
   last_login: null,
 });
-const router = useRouter();
 const usageSummary = ref<UsageSummary>({
   recent_records: [],
 });
@@ -307,7 +201,6 @@ const sessionSummary = ref<SessionSummary>({
   reason: '',
   pool_mode: '',
   isolated_session: false,
-  bound_pools: [],
   web_quota_status: {
     allowed: true,
     reason: '',
@@ -324,26 +217,12 @@ const sessionSummary = ref<SessionSummary>({
     rules: [],
     warnings: [],
   },
-  available_accounts: {
-    web_total: 0,
-    api_total: 0,
-    web_official: 0,
-    web_relay: 0,
-    api_official: 0,
-    api_relay: 0,
-    web_candidates: 0,
-    api_candidates: 0,
-  },
-  supported_models: [],
-  recommended_account: null,
-  recent_dispatches: [],
 });
 
 const userInitial = computed(() => profile.value.username?.trim().charAt(0).toUpperCase() || 'U');
 const quotaRules = computed(() => sessionSummary.value.web_quota_status.rules || []);
 const webQuotaWarnings = computed(() => sessionSummary.value.web_quota_status.warnings || []);
 const recentRecords = computed(() => usageSummary.value.recent_records || []);
-const recentDispatches = computed(() => sessionSummary.value.recent_dispatches.slice(0, 6) || []);
 
 const formatStatus = (status: string) => {
   if (status === 'disabled') return '已停用';
@@ -366,19 +245,6 @@ const formatUsage = (used: number, limit: number, suffix: string) => {
   return `${used} ${suffix} / ${limit} ${suffix}`;
 };
 
-const formatDecisionStatus = (value: string) => {
-  if (value === 'selected') return '已命中';
-  if (value === 'rejected') return '已拦截';
-  return '未命中';
-};
-
-const formatEntrypoint = (value: string) => {
-  if (value === 'get_mirror_token') return '直聊入口';
-  if (value === 'user_chatgpt_list') return '账号列表';
-  if (value === 'chatgpt_login') return '网页登录';
-  return value || '系统调度';
-};
-
 const getProfile = async () => {
   const response = await RequestApi('/0x/user/me');
   if (!response.ok) return;
@@ -397,10 +263,6 @@ const getSessionSummary = async () => {
   sessionSummary.value = await response.json();
 };
 
-const handleOpenChat = async () => {
-  await router.push({ name: 'CustomerChat' });
-};
-
 onMounted(async () => {
   await Promise.all([getProfile(), getUsageSummary(), getSessionSummary()]);
 });
@@ -413,15 +275,13 @@ onMounted(async () => {
   gap: 16px;
 }
 
-.account-grid,
-.access-grid {
+.account-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
 .account-panel,
-.access-panel,
 .records-panel {
   padding: 24px;
   border: 1px solid rgba(20, 28, 23, 0.08);
@@ -441,8 +301,7 @@ onMounted(async () => {
   margin-bottom: 18px;
 }
 
-.section-kicker,
-.access-label {
+.section-kicker {
   margin: 0 0 10px;
   color: #78907e;
   font-size: 11px;
@@ -459,8 +318,7 @@ onMounted(async () => {
 }
 
 .profile-stack,
-.rule-stack,
-.dispatch-list {
+.rule-stack {
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -477,8 +335,7 @@ onMounted(async () => {
 
 .profile-hero h3,
 .plan-name,
-.rule-model,
-.dispatch-title {
+.rule-model {
   margin: 0;
   font-size: 18px;
   font-weight: 700;
@@ -487,7 +344,6 @@ onMounted(async () => {
 .profile-hero p,
 .plan-code,
 .rule-meta,
-.dispatch-meta,
 .empty-copy {
   margin: 6px 0 0;
   color: #738379;
@@ -507,17 +363,14 @@ onMounted(async () => {
   font-weight: 700;
 }
 
-.profile-matrix,
-.access-matrix {
+.profile-matrix {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
 .profile-cell,
-.rule-row,
-.access-stat,
-.dispatch-row {
+.rule-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -527,19 +380,9 @@ onMounted(async () => {
   background: rgba(245, 248, 244, 0.94);
 }
 
-.profile-cell span,
-.access-stat span {
+.profile-cell span {
   color: #738379;
   font-size: 13px;
-}
-
-.access-card {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 18px;
-  border-radius: 24px;
-  background: rgba(245, 248, 244, 0.94);
 }
 
 .plan-hero {
@@ -550,8 +393,7 @@ onMounted(async () => {
     radial-gradient(circle at top right, rgba(147, 183, 155, 0.22), transparent 42%);
 }
 
-.plan-state,
-.dispatch-tag {
+.plan-state {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -562,14 +404,12 @@ onMounted(async () => {
   font-weight: 700;
 }
 
-.plan-state.ok,
-.dispatch-tag.success {
+.plan-state.ok {
   background: rgba(31, 142, 90, 0.12);
   color: #186742;
 }
 
-.plan-state.warn,
-.dispatch-tag.warn {
+.plan-state.warn {
   background: rgba(209, 122, 42, 0.12);
   color: #8f5118;
 }
@@ -579,36 +419,6 @@ onMounted(async () => {
   flex-direction: column;
   align-items: flex-end;
   gap: 4px;
-}
-
-.chip-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.84);
-  color: #244033;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.chat-link {
-  min-height: 44px;
-  padding: 0 18px;
-  border: none;
-  border-radius: 999px;
-  background: #18231d;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
 }
 
 .record-table {
@@ -669,29 +479,24 @@ onMounted(async () => {
 }
 
 @media (max-width: 1080px) {
-  .account-grid,
-  .access-grid {
+  .account-grid {
     grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 720px) {
   .account-panel,
-  .access-panel,
   .records-panel {
     padding: 20px;
     border-radius: 24px;
   }
 
-  .profile-matrix,
-  .access-matrix {
+  .profile-matrix {
     grid-template-columns: 1fr;
   }
 
   .profile-cell,
-  .rule-row,
-  .access-stat,
-  .dispatch-row {
+  .rule-row {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -706,10 +511,6 @@ onMounted(async () => {
 
   .record-row {
     grid-template-columns: 1fr;
-  }
-
-  .chat-link {
-    width: 100%;
   }
 
   .section-head {
