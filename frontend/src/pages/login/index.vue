@@ -371,9 +371,16 @@ const onSubmit: FormProps['onSubmit'] = async ({ validateResult, firstError }) =
 };
 
 const getVersionCfg = async () => {
-  const response = await fetch('/0x/user/version-cfg');
-  const data = await response.json();
-  Object.assign(cfg.value, { ...data });
+  try {
+    const response = await fetch('/0x/user/version-cfg');
+    if (!response.ok) {
+      return;
+    }
+    const data = await response.json();
+    Object.assign(cfg.value, { ...data });
+  } catch (error) {
+    console.error(error);
+  }
 };
 </script>
 

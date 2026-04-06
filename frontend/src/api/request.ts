@@ -4,6 +4,15 @@ import { MessagePlugin } from 'tdesign-vue-next';
 import router from '@/router';
 import { useUserStore } from '@/store';
 
+const buildErrorResponse = (status: number, message = '') => {
+  return new Response(message ? JSON.stringify({ message }) : null, {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+};
+
 const RequestApi = async (url: string, method = 'GET', body: any = undefined) => {
   const userStore = useUserStore();
   userStore.hydrateAuthState();
@@ -13,11 +22,18 @@ const RequestApi = async (url: string, method = 'GET', body: any = undefined) =>
     Authorization: `Token ${token}`,
   };
 
-  const response = await fetch(url, {
-    method,
-    headers: defaultHeaders,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers: defaultHeaders,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (error) {
+    console.error(error);
+    MessagePlugin.error('网络请求失败');
+    return buildErrorResponse(503, 'network_error');
+  }
 
   if (response.status === 401) {
     await userStore.logout();
@@ -25,7 +41,7 @@ const RequestApi = async (url: string, method = 'GET', body: any = undefined) =>
       path: '/login',
       query: { redirect: encodeURIComponent(router.currentRoute.value.fullPath) },
     });
-    return new Response();
+    return buildErrorResponse(401, 'unauthorized');
   }
 
   if (response.status === 403) {
@@ -34,17 +50,17 @@ const RequestApi = async (url: string, method = 'GET', body: any = undefined) =>
       path: '/login',
       query: { redirect: encodeURIComponent(router.currentRoute.value.fullPath) },
     });
-    return new Response();
+    return buildErrorResponse(403, 'forbidden');
   }
 
   if (response.status === 500) {
     MessagePlugin.error('系统异常');
-    return new Response();
+    return buildErrorResponse(500, 'server_error');
   }
 
   if (response.status === 502) {
     MessagePlugin.error('服务未正常启动');
-    return new Response();
+    return buildErrorResponse(502, 'bad_gateway');
   }
 
   return response;
