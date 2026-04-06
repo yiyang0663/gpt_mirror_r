@@ -3,7 +3,7 @@
     <header class="workspace-head">
       <label class="model-switch">
         <span class="model-switch-brand">ChatGPT</span>
-        <select v-model="selectedModel" class="model-switch-select" :disabled="pending || conversationLoading">
+        <select v-model="selectedModel" class="model-switch-select" :disabled="isComposerBusy">
           <option v-for="item in modelOptions" :key="item" :value="item">{{ item }}</option>
         </select>
       </label>
@@ -32,7 +32,7 @@
             class="composer-input"
             rows="1"
             placeholder="询问任何问题"
-            :disabled="!sessionSummary.available || pending || conversationLoading"
+            :disabled="!sessionSummary.available || isComposerBusy"
             @input="handleDraftInput"
             @keydown="handleComposerKeydown"
           ></textarea>
@@ -110,7 +110,7 @@
               class="composer-input"
               rows="1"
               placeholder="继续提问"
-              :disabled="!sessionSummary.available || pending || conversationLoading"
+              :disabled="!sessionSummary.available || isComposerBusy"
               @input="handleDraftInput"
               @keydown="handleComposerKeydown"
             ></textarea>
@@ -197,6 +197,7 @@ const sessionSummary = ref<SessionSummary>({
 const selectedModel = ref('gpt-5.4');
 const draft = ref('');
 const pending = ref(false);
+const sending = ref(false);
 const messages = ref<ChatMessage[]>([]);
 const currentEntry = ref<ConsumerChatEntry | null>(null);
 const messageViewportRef = ref<HTMLElement | null>(null);
@@ -264,8 +265,12 @@ const lastAssistantMessageId = computed(() => {
   return lastMessage?.id || '';
 });
 
+const isComposerBusy = computed(() => {
+  return sending.value || pending.value || conversationLoading.value;
+});
+
 const canSend = computed(() => {
-  return Boolean(draft.value.trim()) && sessionSummary.value.available && !pending.value && !conversationLoading.value;
+  return Boolean(draft.value.trim()) && sessionSummary.value.available && !isComposerBusy.value;
 });
 
 const scrollToBottom = async () => {
@@ -438,7 +443,7 @@ const syncActiveConversation = async () => {
 };
 
 const startNewConversation = async (syncRoute = true, prefill = '') => {
-  if (pending.value) {
+  if (sending.value || pending.value) {
     return;
   }
 
@@ -454,7 +459,7 @@ const startNewConversation = async (syncRoute = true, prefill = '') => {
 };
 
 const openConversation = async (conversationId: number, syncRoute = true) => {
-  if (pending.value || conversationLoading.value || activeConversationId.value === conversationId) {
+  if (sending.value || pending.value || conversationLoading.value || activeConversationId.value === conversationId) {
     return;
   }
 
@@ -494,7 +499,7 @@ const applyPrompt = async (prompt: string) => {
 };
 
 const canRegenerate = (messageId: string) => {
-  return !pending.value && lastAssistantMessageId.value === messageId && sessionSummary.value.available;
+  return !sending.value && !pending.value && lastAssistantMessageId.value === messageId && sessionSummary.value.available;
 };
 
 const copyMessage = async (content: string) => {
@@ -685,29 +690,34 @@ const requestAssistantReply = async (requestMessages: Array<{ role: string; cont
 
 const sendMessage = async () => {
   const content = draft.value.trim();
-  if (!content || pending.value || !sessionSummary.value.available || conversationLoading.value) {
+  if (!content || sending.value || pending.value || !sessionSummary.value.available || conversationLoading.value) {
     return;
   }
 
-  const conversationId = await ensureActiveConversation();
-  if (!conversationId) {
-    return;
-  }
+  sending.value = true;
+  try {
+    const conversationId = await ensureActiveConversation();
+    if (!conversationId) {
+      return;
+    }
 
-  const userMessage: ChatMessage = {
-    id: createMessageId('user'),
-    role: 'user',
-    content,
-  };
-  messages.value.push(userMessage);
-  draft.value = '';
-  await syncComposerHeights();
-  await syncActiveConversation();
-  await requestAssistantReply(buildRequestMessages());
+    const userMessage: ChatMessage = {
+      id: createMessageId('user'),
+      role: 'user',
+      content,
+    };
+    messages.value.push(userMessage);
+    draft.value = '';
+    await syncComposerHeights();
+    await syncActiveConversation();
+    await requestAssistantReply(buildRequestMessages());
+  } finally {
+    sending.value = false;
+  }
 };
 
 const regenerateLastResponse = async () => {
-  if (pending.value || conversationLoading.value || !sessionSummary.value.available) {
+  if (sending.value || pending.value || conversationLoading.value || !sessionSummary.value.available) {
     return;
   }
 
@@ -766,7 +776,7 @@ watch(selectedModel, async (nextModel, previousModel) => {
   modelOptions.value = uniqModelOptions([nextModel, ...modelOptions.value, ...defaultConsumerModels]);
   await refreshChatEntry();
 
-  if (activeConversationId.value && !pending.value) {
+  if (activeConversationId.value && !sending.value && !pending.value) {
     await syncActiveConversation();
   }
 });
