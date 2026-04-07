@@ -62,14 +62,6 @@
             <strong>{{ sessionSummary.api_quota_status.allowed ? '可用' : '受限' }}</strong>
           </div>
           <div class="detail-row">
-            <span>账号池模式</span>
-            <strong>{{ profile.pool_mode === 'specific_pools' ? '指定号池' : '公共账号池' }}</strong>
-          </div>
-          <div class="detail-row">
-            <span>可用账号数</span>
-            <strong>{{ profile.available_account_count || 0 }}</strong>
-          </div>
-          <div class="detail-row">
             <span>到期时间</span>
             <strong>{{ profile.expired_date || '长期有效' }}</strong>
           </div>
@@ -99,7 +91,7 @@
             </div>
           </div>
         </div>
-        <p v-else class="empty-copy">当前套餐未配置显式网页配额规则，默认按后台账号池可用性提供服务。</p>
+        <p v-else class="empty-copy">当前套餐未配置显式网页配额规则，可直接使用网页对话服务。</p>
         <div v-if="webQuotaWarnings.length" class="warning-stack">
           <p v-for="item in webQuotaWarnings" :key="item" class="warning-copy">{{ item }}</p>
         </div>
@@ -145,7 +137,7 @@
               {{ pool.car_name }} · {{ pool.account_count }} 个账号
             </span>
           </div>
-          <p v-else class="empty-copy">当前使用站点公共账号池。</p>
+          <p v-else class="empty-copy">当前已接入可用对话通道。</p>
 
           <div class="model-group">
             <span v-for="item in sessionSummary.supported_models" :key="item" class="model-chip">{{ item }}</span>

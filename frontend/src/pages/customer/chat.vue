@@ -247,7 +247,7 @@ const formatSourceType = (sourceType: string) => {
 
 const statusMessage = computed(() => {
   return sessionSummary.value.available
-    ? sessionSummary.value.web_quota_status.warnings?.[0] || '当前会话已连接站点统一账号池。'
+    ? sessionSummary.value.web_quota_status.warnings?.[0] || '当前会话已连接可用对话通道。'
     : sessionSummary.value.reason || sessionSummary.value.web_quota_status.reason || '当前账号暂未开放网页聊天';
 });
 

@@ -32,14 +32,6 @@
               <strong>{{ profile.date_joined || '-' }}</strong>
             </div>
             <div class="profile-cell">
-              <span>账号池</span>
-              <strong>{{ profile.pool_mode === 'specific_pools' ? '指定号池' : '公共账号池' }}</strong>
-            </div>
-            <div class="profile-cell">
-              <span>可用账号数</span>
-              <strong>{{ profile.available_account_count || 0 }}</strong>
-            </div>
-            <div class="profile-cell">
               <span>会话隔离</span>
               <strong>{{ profile.isolated_session ? '独立会话' : '共享会话' }}</strong>
             </div>
@@ -78,7 +70,7 @@
             </div>
           </div>
         </div>
-        <p v-else class="empty-copy">当前没有额外网页配额限制，默认按站点账号池状态提供服务。</p>
+        <p v-else class="empty-copy">当前没有额外网页配额限制，可直接使用网页对话服务。</p>
         <div v-if="webQuotaWarnings.length" class="warning-stack">
           <p v-for="item in webQuotaWarnings" :key="item" class="warning-copy">{{ item }}</p>
         </div>
