@@ -1,4 +1,5 @@
 from rest_framework import generics
+from django.db.models import Q
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -18,9 +19,15 @@ class GptCarEnum(APIView):
 
 class GptCarView(generics.ListCreateAPIView):
     permission_classes = (IsAuthenticated, IsAdminUser)
-    queryset = ChatgptCar.objects.order_by("-id").all()
     serializer_class = ShowGptCarSerializer
     pagination_class = DefaultPageNumberPagination
+
+    def get_queryset(self):
+        queryset = ChatgptCar.objects.order_by("-id").all()
+        search = str(self.request.GET.get("search") or "").strip()
+        if search:
+            queryset = queryset.filter(Q(car_name__icontains=search) | Q(remark__icontains=search))
+        return queryset
 
     def post(self, request, *args, **kwargs):
         obj = ChatgptCar.objects.filter(id=request.data.get("id")).first()

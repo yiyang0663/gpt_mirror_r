@@ -3,11 +3,21 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.db.models import Q
 
 from app.accounts.models import ServicePlan, QuotaRule, User
 from app.accounts.quota import assign_service_plan, sync_user_plan_snapshot
 from app.accounts.serializers import ShowServicePlanSerializer, ServicePlanInputSerializer, AssignUserPlanSerializer
 from app.page import DefaultPageNumberPagination
+
+
+def parse_bool_query(value):
+    value = str(value or "").strip().lower()
+    if value in {"1", "true", "yes"}:
+        return True
+    if value in {"0", "false", "no"}:
+        return False
+    return None
 
 
 def refresh_plan_users(plan):
@@ -28,6 +38,20 @@ class ServicePlanView(generics.ListCreateAPIView):
 
     def get(self, request, *args, **kwargs):
         queryset = ServicePlan.objects.prefetch_related("quota_rules").order_by("display_order", "id")
+        search = str(request.GET.get("search") or "").strip()
+        is_active = parse_bool_query(request.GET.get("is_active"))
+        allow_web = parse_bool_query(request.GET.get("allow_web"))
+        allow_api = parse_bool_query(request.GET.get("allow_api"))
+
+        if search:
+            queryset = queryset.filter(Q(name__icontains=search) | Q(code__icontains=search) | Q(remark__icontains=search))
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active)
+        if allow_web is not None:
+            queryset = queryset.filter(allow_web=allow_web)
+        if allow_api is not None:
+            queryset = queryset.filter(allow_api=allow_api)
+
         pg = DefaultPageNumberPagination()
         pg.page_size_query_param = "page_size"
         page_items = pg.paginate_queryset(queryset, request=request)

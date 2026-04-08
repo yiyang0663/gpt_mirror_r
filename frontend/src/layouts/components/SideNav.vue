@@ -13,10 +13,10 @@
 
       <button class="admin-side-primary" type="button" @click="goPortal">
         <t-icon name="browse" />
-        <span v-if="!collapsed">打开用户端</span>
+        <span v-if="!collapsed">打开 C 端</span>
       </button>
 
-      <div v-if="!collapsed" class="admin-side-section">Workspace</div>
+      <div v-if="!collapsed" class="admin-side-section">Operations</div>
 
       <t-menu class="admin-side-menu" :theme="theme" :value="active" :collapsed="collapsed" :default-expanded="defaultExpanded">
         <menu-content :nav-data="menu" />
@@ -25,9 +25,9 @@
       <div class="admin-side-footer">
         <div class="admin-side-status">
           <span class="admin-side-status-dot"></span>
-          <span v-if="!collapsed">Docker · Auto Deploy</span>
+          <span v-if="!collapsed">Site Live · Push Deploy</span>
         </div>
-        <p v-if="!collapsed" class="admin-side-caption">账号、号池和系统日志都在同一个工作区里维护。</p>
+        <p v-if="!collapsed" class="admin-side-caption">用户、上游账号、资源池和系统审计统一在这一侧完成值守。</p>
       </div>
     </div>
     <div :class="`${prefix}-side-nav-placeholder${collapsed ? '-hidden' : ''}`"></div>
@@ -117,11 +117,11 @@ onBeforeUnmount(() => {
 });
 
 const goHome = () => {
-  router.push('/account/chatgpt');
+  router.push('/overview');
 };
 
 const goPortal = () => {
-  window.open('/', '_blank', 'noopener,noreferrer');
+  window.open('/#/customer/chat', '_blank', 'noopener,noreferrer');
 };
 </script>
 
@@ -133,10 +133,14 @@ const goPortal = () => {
   flex-direction: column;
   width: 252px;
   padding: 12px;
-  border: 1px solid rgba(17, 17, 17, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 28px;
-  background: rgba(245, 245, 242, 0.88);
-  box-shadow: 0 20px 50px rgba(17, 17, 17, 0.06);
+  background:
+    radial-gradient(circle at top, rgba(16, 163, 127, 0.18), transparent 38%),
+    linear-gradient(180deg, rgba(12, 18, 28, 0.98) 0%, rgba(15, 23, 42, 0.98) 100%);
+  box-shadow:
+    0 24px 60px rgba(15, 23, 42, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(14px);
 }
 
@@ -153,7 +157,7 @@ const goPortal = () => {
   padding: 8px 10px 12px;
   border: none;
   background: transparent;
-  color: #161616;
+  color: #f8fafc;
   cursor: pointer;
   text-align: left;
 }
@@ -165,8 +169,8 @@ const goPortal = () => {
   width: 38px;
   height: 38px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .admin-side-brand-icon {
@@ -181,14 +185,14 @@ const goPortal = () => {
 }
 
 .admin-side-brand-copy strong {
-  color: #151515;
+  color: #f8fafc;
   font-size: 15px;
   font-weight: 700;
   line-height: 1.2;
 }
 
 .admin-side-brand-copy small {
-  color: #7c7c78;
+  color: rgba(226, 232, 240, 0.68);
   font-size: 12px;
   line-height: 1.3;
 }
@@ -202,13 +206,13 @@ const goPortal = () => {
   min-height: 44px;
   margin: 4px 0 16px;
   padding: 0 14px;
-  border: 1px solid rgba(17, 17, 17, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.06);
   box-shadow:
-    0 10px 30px rgba(17, 17, 17, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.88);
-  color: #171717;
+    0 10px 30px rgba(15, 23, 42, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: #f8fafc;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -220,8 +224,8 @@ const goPortal = () => {
 
 .admin-side-primary:hover {
   transform: translateY(-1px);
-  border-color: rgba(17, 17, 17, 0.14);
-  box-shadow: 0 16px 36px rgba(17, 17, 17, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.24);
 }
 
 .admin-side-panel.is-collapsed .admin-side-primary {
@@ -231,7 +235,7 @@ const goPortal = () => {
 
 .admin-side-section {
   margin: 0 10px 8px;
-  color: #858580;
+  color: rgba(148, 163, 184, 0.72);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -260,7 +264,7 @@ const goPortal = () => {
   margin: 2px 0;
   padding: 12px 12px 12px 14px;
   border-radius: 16px;
-  color: #232323;
+  color: rgba(226, 232, 240, 0.84);
   font-size: 14px;
   transition:
     background-color 180ms ease,
@@ -270,22 +274,24 @@ const goPortal = () => {
 
 .admin-side-menu:deep(.t-menu__item:hover),
 .admin-side-menu:deep(.t-submenu__title:hover) {
-  background: rgba(17, 17, 17, 0.05);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .admin-side-menu:deep(.t-menu__item .t-icon),
 .admin-side-menu:deep(.t-submenu__title .t-icon) {
   margin-right: 12px;
-  color: #666;
+  color: rgba(148, 163, 184, 0.82);
 }
 
 .admin-side-menu:deep(.t-is-active:not(.t-is-opened)),
 .admin-side-menu:deep(.t-is-active > .t-submenu__title) {
-  background: rgba(255, 255, 255, 0.92);
+  background:
+    linear-gradient(135deg, rgba(16, 163, 127, 0.22) 0%, rgba(30, 41, 59, 0.72) 100%),
+    rgba(255, 255, 255, 0.08);
   box-shadow:
-    inset 0 0 0 1px rgba(17, 17, 17, 0.06),
-    0 12px 30px rgba(17, 17, 17, 0.05);
-  color: #111;
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 12px 30px rgba(15, 23, 42, 0.24);
+  color: #fff;
 }
 
 .admin-side-menu:deep(.t-is-active .t-icon) {
@@ -295,7 +301,7 @@ const goPortal = () => {
 .admin-side-menu:deep(.t-submenu__content) {
   margin-left: 16px;
   padding-left: 10px;
-  border-left: 1px solid rgba(17, 17, 17, 0.08);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .admin-side-panel.is-collapsed .admin-side-menu:deep(.t-menu__item),
@@ -320,8 +326,8 @@ const goPortal = () => {
   min-height: 32px;
   padding: 0 12px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
-  color: #3a3a37;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(226, 232, 240, 0.82);
   font-size: 12px;
   font-weight: 600;
 }
@@ -331,12 +337,12 @@ const goPortal = () => {
   height: 8px;
   border-radius: 999px;
   background: #10a37f;
-  box-shadow: 0 0 0 5px rgba(16, 163, 127, 0.12);
+  box-shadow: 0 0 0 5px rgba(16, 163, 127, 0.18);
 }
 
 .admin-side-caption {
   margin: 12px 4px 0;
-  color: #7a7a75;
+  color: rgba(148, 163, 184, 0.74);
   font-size: 12px;
   line-height: 1.5;
 }

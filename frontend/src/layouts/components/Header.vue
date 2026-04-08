@@ -15,6 +15,12 @@
           </div>
         </div>
 
+        <div class="admin-header-pills">
+          <span class="admin-header-pill is-live">Site Live</span>
+          <span class="admin-header-pill">Push Deploy</span>
+          <span class="admin-header-pill">Operator Console</span>
+        </div>
+
         <div class="admin-header-actions">
           <button class="admin-header-link" type="button" @click="goPortal">用户端</button>
 
@@ -119,7 +125,7 @@ const sectionTitle = computed(() => renderTitle(parentRoute.value?.meta?.title a
 const homePath = computed(() => {
   const redirect = parentRoute.value?.redirect;
   if (typeof redirect === 'string') return redirect;
-  return parentRoute.value?.path || '/account/chatgpt';
+  return parentRoute.value?.path || '/overview';
 });
 const displayName = computed(() => user.userInfo.name || 'Administrator');
 const userInitial = computed(() => displayName.value.trim().charAt(0).toUpperCase() || 'A');
@@ -163,11 +169,13 @@ const navToGitHub = () => {
   gap: 16px;
   min-height: 74px;
   padding: 16px 20px;
-  border: 1px solid rgba(17, 17, 17, 0.06);
+  border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 28px;
-  background: rgba(255, 255, 255, 0.72);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(248, 250, 252, 0.9) 100%),
+    rgba(255, 255, 255, 0.72);
   box-shadow:
-    0 18px 48px rgba(17, 17, 17, 0.05),
+    0 18px 48px rgba(15, 23, 42, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.84);
   backdrop-filter: blur(14px);
 }
@@ -187,12 +195,39 @@ const navToGitHub = () => {
   gap: 10px;
 }
 
+.admin-header-pills {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.admin-header-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #475467;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.admin-header-pill.is-live {
+  border-color: rgba(16, 163, 127, 0.16);
+  background: rgba(16, 163, 127, 0.08);
+  color: #0f766e;
+}
+
 .admin-header-toggle,
 .admin-header-icon-btn {
   width: 42px;
   height: 42px;
   border-radius: 14px;
-  background: rgba(17, 17, 17, 0.04);
+  background: rgba(15, 23, 42, 0.05);
   color: #303030;
 }
 
@@ -227,9 +262,9 @@ const navToGitHub = () => {
 .admin-header-link {
   min-height: 42px;
   padding: 0 16px;
-  border: 1px solid rgba(17, 17, 17, 0.08);
+  border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 999px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.86);
   color: #181818;
   font-size: 14px;
   font-weight: 600;
@@ -241,7 +276,7 @@ const navToGitHub = () => {
   padding: 4px 12px 4px 6px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.92);
-  box-shadow: inset 0 0 0 1px rgba(17, 17, 17, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.06);
 }
 
 .header-user-badge {
@@ -304,6 +339,10 @@ const navToGitHub = () => {
   }
 
   .admin-header-link {
+    display: none;
+  }
+
+  .admin-header-pills {
     display: none;
   }
 

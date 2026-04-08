@@ -1,6 +1,54 @@
 <template>
-  <div>
+  <div class="ops-page">
+    <admin-page-intro
+      eyebrow="Upstream Accounts"
+      title="上游账号"
+      description="维护官方账号和中转站资源，控制可用状态、调度优先级和 Web/API 开关。"
+    />
+
+    <admin-metric-grid :items="metricCards" />
+
     <t-card class="list-card-container">
+      <div class="ops-surface__head">
+        <div>
+          <h3>账号源列表</h3>
+          <p>在同一张表里核对授权状态、健康状态和支持模型。</p>
+        </div>
+        <span class="ops-surface__badge">共 {{ pagination.total }} 个账号源</span>
+      </div>
+
+      <div class="ops-filter-bar">
+        <div class="ops-filter-grid">
+          <t-input v-model="filters.search" clearable placeholder="搜索账号标识或类型" style="width: 220px" />
+          <t-select v-model="filters.account_type" clearable placeholder="接入方式" style="width: 150px">
+            <t-option label="官方 Token" value="chatgpt_token" />
+            <t-option label="中转站" value="relay_api" />
+          </t-select>
+          <t-select v-model="filters.source_type" clearable placeholder="来源" style="width: 140px">
+            <t-option label="官方账号" value="official" />
+            <t-option label="中转站" value="relay" />
+          </t-select>
+          <t-select v-model="filters.health_status" clearable placeholder="健康状态" style="width: 150px">
+            <t-option label="健康" value="healthy" />
+            <t-option label="降级" value="degraded" />
+            <t-option label="停用" value="down" />
+          </t-select>
+          <t-select v-model="filters.auth_status" clearable placeholder="授权状态" style="width: 140px">
+            <t-option label="可用" value="true" />
+            <t-option label="失效" value="false" />
+          </t-select>
+          <t-select v-model="filters.enabled_for_web" clearable placeholder="网页可用" style="width: 140px">
+            <t-option label="是" value="true" />
+            <t-option label="否" value="false" />
+          </t-select>
+        </div>
+
+        <div class="ops-filter-actions">
+          <t-button theme="primary" @click="handleSearch">查询</t-button>
+          <t-button theme="default" variant="outline" @click="handleReset">重置</t-button>
+        </div>
+      </div>
+
       <t-row justify="space-between">
         <div class="left-operation-container">
           <t-button @click="handleShowDialog">录入</t-button>
@@ -253,10 +301,13 @@
 </template>
 
 <script setup lang="ts">
+import { AnalyticsIcon, ApiIcon, DataDisplayIcon, InternetIcon } from 'tdesign-icons-vue-next';
 import { MessagePlugin, TableProps } from 'tdesign-vue-next';
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 
 import RequestApi from '@/api/request';
+import AdminMetricGrid from '@/components/admin/AdminMetricGrid.vue';
+import AdminPageIntro from '@/components/admin/AdminPageIntro.vue';
 import { ChatgptTokenTutorialUrl } from '@/constants/index';
 import { TimestampToDate } from '@/utils/date';
 
@@ -265,6 +316,7 @@ interface TableData {
   account_type: string;
   source_type: string;
   auth_mode: string;
+  auth_status: boolean;
   health_status: string;
   plan_type: string;
   supported_models: string[];
@@ -283,6 +335,14 @@ const selectedRowKeys = ref<TableProps['selectedRowKeys']>([]);
 const loading = ref(false);
 const tableLoading = ref(false);
 const tableData = ref<TableData[]>([]);
+const filters = reactive({
+  search: '',
+  account_type: '',
+  health_status: '',
+  source_type: '',
+  auth_status: '',
+  enabled_for_web: '',
+});
 
 const pagination = {
   defaultPageSize: 20,
@@ -322,6 +382,42 @@ const columns: TableProps['columns'] = [
   { colKey: 'remark', title: '备注' },
   { width: 200, colKey: 'op', title: '操作' },
 ];
+
+const metricCards = computed(() => {
+  const healthyCount = tableData.value.filter((item) => item.health_status === 'healthy' && item.auth_status).length;
+  const relayCount = tableData.value.filter((item) => item.account_type === 'relay_api').length;
+  const webEnabledCount = tableData.value.filter((item) => item.enabled_for_web).length;
+  return [
+    {
+      label: '账号源总数',
+      value: pagination.total,
+      meta: '官方账号与中转账号统一管理',
+      icon: DataDisplayIcon,
+      color: '#1d4ed8',
+    },
+    {
+      label: '当前页健康',
+      value: healthyCount,
+      meta: '授权有效且健康状态正常',
+      icon: AnalyticsIcon,
+      color: '#0f766e',
+    },
+    {
+      label: '中转账号',
+      value: relayCount,
+      meta: '当前页 relay 资源数量',
+      icon: InternetIcon,
+      color: '#7c3aed',
+    },
+    {
+      label: '网页可用',
+      value: webEnabledCount,
+      meta: '允许 Web 侧直接调度',
+      icon: ApiIcon,
+      color: '#c2410c',
+    },
+  ];
+});
 const showDialog = ref(false);
 const dialogVisibleDelete = ref(false);
 const usernameDelete = ref('');
@@ -393,6 +489,12 @@ const getChatGPTList = async () => {
     page: pagination.defaultCurrent,
     page_size: pagination.defaultPageSize,
   };
+  if (filters.search) params.search = filters.search;
+  if (filters.account_type) params.account_type = filters.account_type;
+  if (filters.health_status) params.health_status = filters.health_status;
+  if (filters.source_type) params.source_type = filters.source_type;
+  if (filters.auth_status) params.auth_status = filters.auth_status;
+  if (filters.enabled_for_web) params.enabled_for_web = filters.enabled_for_web;
 
   const queryString = new URLSearchParams(params).toString();
   const response = await RequestApi(`${ChatgptTokenUrl}?${queryString}`);
@@ -403,6 +505,22 @@ const getChatGPTList = async () => {
   pagination.total = data.count;
 
   tableLoading.value = false;
+};
+
+const handleSearch = async () => {
+  pagination.defaultCurrent = 1;
+  await getChatGPTList();
+};
+
+const handleReset = async () => {
+  filters.search = '';
+  filters.account_type = '';
+  filters.health_status = '';
+  filters.source_type = '';
+  filters.auth_status = '';
+  filters.enabled_for_web = '';
+  pagination.defaultCurrent = 1;
+  await getChatGPTList();
 };
 
 const addChatToken = async () => {

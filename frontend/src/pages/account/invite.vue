@@ -1,6 +1,21 @@
 <template>
-  <div>
+  <div class="ops-page">
+    <admin-page-intro
+      eyebrow="Growth"
+      title="邀请链接"
+      description="为指定账号生成可控邀请入口，适合灰度分发和短期投放。"
+    />
+
+    <admin-metric-grid :items="metricCards" />
+
     <t-card>
+      <div class="ops-surface__head">
+        <div>
+          <h3>创建邀请</h3>
+          <p>设置过期时间和可用次数，生成可直接分发的邀请链接。</p>
+        </div>
+      </div>
+
       <t-form
         ref="inviteUserFormRef"
         :data="inviteUser"
@@ -25,6 +40,13 @@
       </t-form>
     </t-card>
     <t-card>
+      <div class="ops-surface__head">
+        <div>
+          <h3>邀请记录</h3>
+          <p>查看当前可用的邀请链接、剩余次数和过期时间。</p>
+        </div>
+      </div>
+
       <t-table :data="tableData" :columns="columns" rowKey="chatgpt_username" :loading="tableLoading">
         <template #expires_at="{ row }">
           {{ TimestampToDate(row.created_at + row.expires_time * 1000) }}
@@ -59,11 +81,14 @@
 </template>
 
 <script setup lang="ts">
+import { AnalyticsIcon, CalendarIcon, DataDisplayIcon, LinkIcon } from 'tdesign-icons-vue-next';
 import { FormInstanceFunctions, FormProps, MessagePlugin, TableProps } from 'tdesign-vue-next';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 
 import RequestApi from '@/api/request';
+import AdminMetricGrid from '@/components/admin/AdminMetricGrid.vue';
+import AdminPageIntro from '@/components/admin/AdminPageIntro.vue';
 import { TimestampToDate } from '@/utils/date';
 
 const route = useRoute();
@@ -99,6 +124,42 @@ interface InviteUserForm {
 
 interface TableData {}
 const tableData = ref<TableData[]>([]);
+
+const metricCards = computed(() => {
+  const totalInvites = tableData.value.length;
+  const remainingSlots = tableData.value.reduce((sum: number, item: any) => sum + Math.max((item.invite_count || 0) - (item.used_count || 0), 0), 0);
+  const expiringSoon = tableData.value.filter((item: any) => item.created_at + item.expires_time * 1000 <= Date.now() + 24 * 60 * 60 * 1000).length;
+  return [
+    {
+      label: '邀请链接',
+      value: totalInvites,
+      meta: '当前后台可见的邀请记录',
+      icon: LinkIcon,
+      color: '#1d4ed8',
+    },
+    {
+      label: '剩余名额',
+      value: remainingSlots,
+      meta: '按邀请数量减去已使用数量计算',
+      icon: DataDisplayIcon,
+      color: '#0f766e',
+    },
+    {
+      label: '24h 内到期',
+      value: expiringSoon,
+      meta: '便于及时续期或删除',
+      icon: CalendarIcon,
+      color: '#c2410c',
+    },
+    {
+      label: '来源账号',
+      value: inviteUser.value.chatgpt_username || '未指定',
+      meta: '本页默认绑定的 ChatGPT 账号',
+      icon: AnalyticsIcon,
+      color: '#7c3aed',
+    },
+  ];
+});
 
 const FORM_RULES: FormProps['rules'] = {
   chatgpt_username: [{ required: true, message: 'Please input username', trigger: 'blur' }],

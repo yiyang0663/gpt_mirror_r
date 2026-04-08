@@ -1,6 +1,45 @@
 <template>
-  <div>
+  <div class="ops-page">
+    <admin-page-intro
+      eyebrow="Subscription"
+      title="套餐管理"
+      description="集中维护订阅套餐、Web/API 通道开关和模型额度规则。"
+    />
+
+    <admin-metric-grid :items="metricCards" />
+
     <t-card class="list-card-container">
+      <div class="ops-surface__head">
+        <div>
+          <h3>套餐列表</h3>
+          <p>查看套餐状态、渠道开放情况和配额规则密度。</p>
+        </div>
+        <span class="ops-surface__badge">共 {{ pagination.total }} 个套餐</span>
+      </div>
+
+      <div class="ops-filter-bar">
+        <div class="ops-filter-grid">
+          <t-input v-model="filters.search" clearable placeholder="搜索套餐名称、编码或备注" style="width: 240px" />
+          <t-select v-model="filters.is_active" clearable placeholder="启用状态" style="width: 140px">
+            <t-option label="启用" value="true" />
+            <t-option label="停用" value="false" />
+          </t-select>
+          <t-select v-model="filters.allow_web" clearable placeholder="网页可用" style="width: 140px">
+            <t-option label="是" value="true" />
+            <t-option label="否" value="false" />
+          </t-select>
+          <t-select v-model="filters.allow_api" clearable placeholder="API 可用" style="width: 140px">
+            <t-option label="是" value="true" />
+            <t-option label="否" value="false" />
+          </t-select>
+        </div>
+
+        <div class="ops-filter-actions">
+          <t-button theme="primary" @click="handleSearch">查询</t-button>
+          <t-button theme="default" variant="outline" @click="handleReset">重置</t-button>
+        </div>
+      </div>
+
       <t-row justify="space-between">
         <div class="left-operation-container">
           <t-button @click="handleShowDialog">新增套餐</t-button>
@@ -110,10 +149,13 @@
 </template>
 
 <script setup lang="ts">
+import { AnalyticsIcon, ApiIcon, MoneyIcon, SecuredIcon } from 'tdesign-icons-vue-next';
 import { MessagePlugin, TableProps } from 'tdesign-vue-next';
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 
 import RequestApi from '@/api/request';
+import AdminMetricGrid from '@/components/admin/AdminMetricGrid.vue';
+import AdminPageIntro from '@/components/admin/AdminPageIntro.vue';
 
 interface QuotaRuleLine {
   id?: number;
@@ -147,6 +189,12 @@ const dialogVisibleDelete = ref(false);
 const planFormRef = ref();
 const actionType = ref('add');
 const deletePlanId = ref<number | null>(null);
+const filters = reactive({
+  search: '',
+  is_active: '',
+  allow_web: '',
+  allow_api: '',
+});
 
 const channelOptions = [
   { label: '全部', value: 'all' },
@@ -192,6 +240,42 @@ const columns: TableProps['columns'] = [
   { colKey: 'op', title: '操作', width: 120, fixed: 'right' },
 ];
 
+const metricCards = computed(() => {
+  const activeCount = tableData.value.filter((item) => item.is_active).length;
+  const webEnabledCount = tableData.value.filter((item) => item.allow_web).length;
+  const totalRules = tableData.value.reduce((sum, item) => sum + (item.quota_rules?.length || 0), 0);
+  return [
+    {
+      label: '套餐总数',
+      value: pagination.total,
+      meta: '当前后台可维护的套餐',
+      icon: SecuredIcon,
+      color: '#1d4ed8',
+    },
+    {
+      label: '当前页启用',
+      value: activeCount,
+      meta: '本页显示中处于启用态的套餐',
+      icon: AnalyticsIcon,
+      color: '#0f766e',
+    },
+    {
+      label: '网页可用',
+      value: webEnabledCount,
+      meta: '允许 Web 端使用的套餐数',
+      icon: ApiIcon,
+      color: '#7c3aed',
+    },
+    {
+      label: '规则总数',
+      value: totalRules,
+      meta: '当前页累计配额规则',
+      icon: MoneyIcon,
+      color: '#c2410c',
+    },
+  ];
+});
+
 const formatRule = (rule: QuotaRuleLine) => {
   const modelLabel = rule.model_name || '全部模型';
   const channelLabel = channelOptions.find((item) => item.value === rule.channel)?.label || rule.channel;
@@ -213,12 +297,30 @@ const getPlanList = async () => {
     page: pagination.defaultCurrent,
     page_size: pagination.defaultPageSize,
   };
+  if (filters.search) params.search = filters.search;
+  if (filters.is_active) params.is_active = filters.is_active;
+  if (filters.allow_web) params.allow_web = filters.allow_web;
+  if (filters.allow_api) params.allow_api = filters.allow_api;
   const queryString = new URLSearchParams(params).toString();
   const response = await RequestApi(`${PlanUri}?${queryString}`);
   const data = await response.json();
   tableData.value = data.results;
   pagination.total = data.count;
   tableLoading.value = false;
+};
+
+const handleSearch = async () => {
+  pagination.defaultCurrent = 1;
+  await getPlanList();
+};
+
+const handleReset = async () => {
+  filters.search = '';
+  filters.is_active = '';
+  filters.allow_web = '';
+  filters.allow_api = '';
+  pagination.defaultCurrent = 1;
+  await getPlanList();
 };
 
 const addRule = () => {

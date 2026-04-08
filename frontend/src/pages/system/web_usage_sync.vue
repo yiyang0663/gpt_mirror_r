@@ -1,9 +1,20 @@
 <template>
-  <div class="web-usage-sync-page">
+  <div class="ops-page web-usage-sync-page">
+    <admin-page-intro
+      eyebrow="Observability"
+      title="网页用量同步"
+      description="对齐网页请求快照、同步状态和用户活跃度，避免网页端消耗脱离后台管控。"
+    >
+      <template #actions>
+        <t-button theme="primary" :loading="syncLoading" @click="handleSync">手动同步</t-button>
+      </template>
+    </admin-page-intro>
+
+    <admin-metric-grid :items="metricCards" />
+
     <t-card class="toolbar-card">
       <t-row justify="space-between" align="middle" :gutter="[12, 12]">
         <t-space wrap>
-          <t-button :loading="syncLoading" @click="handleSync">手动同步</t-button>
           <t-input v-model="filters.username" clearable placeholder="筛选用户名" style="width: 180px" />
           <t-select v-model="filters.sync_status" clearable placeholder="同步状态" style="width: 160px">
             <t-option label="已同步" value="synced" />
@@ -19,15 +30,6 @@
         </div>
       </t-row>
     </t-card>
-
-    <t-row :gutter="[16, 16]" style="margin-top: 16px">
-      <t-col v-for="item in summaryCards" :key="item.label" :xs="12" :sm="6" :lg="3">
-        <t-card class="summary-card">
-          <p class="summary-label">{{ item.label }}</p>
-          <p class="summary-value">{{ item.value }}</p>
-        </t-card>
-      </t-col>
-    </t-row>
 
     <t-row :gutter="[16, 16]" style="margin-top: 16px">
       <t-col :xs="12" :lg="6">
@@ -89,10 +91,13 @@
 </template>
 
 <script setup lang="ts">
+import { AnalyticsIcon, ChartIcon, NotificationIcon, UsergroupIcon } from 'tdesign-icons-vue-next';
 import { MessagePlugin, TableProps } from 'tdesign-vue-next';
 import { computed, onMounted, reactive, ref } from 'vue';
 
 import RequestApi from '@/api/request';
+import AdminMetricGrid from '@/components/admin/AdminMetricGrid.vue';
+import AdminPageIntro from '@/components/admin/AdminPageIntro.vue';
 import { TimestampToDate } from '@/utils/date';
 
 interface RankLine {
@@ -179,15 +184,35 @@ const columns: TableProps['columns'] = [
   { colKey: 'last_synced_at', title: '最后同步时间', width: 170 },
 ];
 
-const summaryCards = computed(() => [
-  { label: '活跃用户', value: summary.value.active_user_count },
-  { label: '今日已同步', value: summary.value.synced_user_count },
-  { label: '今日滞后', value: summary.value.stale_user_count },
-  { label: '同步覆盖率', value: `${summary.value.sync_ratio}%` },
-  { label: '今日网页请求', value: summary.value.today_total_requests },
-  { label: '本月网页请求', value: summary.value.month_total_requests },
-  { label: '本月快照行数', value: summary.value.month_snapshot_rows },
-  { label: '本月快照天数', value: summary.value.month_snapshot_days },
+const metricCards = computed(() => [
+  {
+    label: '活跃用户',
+    value: summary.value.active_user_count,
+    meta: `${summary.value.synced_user_count} 用户今日已同步`,
+    icon: UsergroupIcon,
+    color: '#1d4ed8',
+  },
+  {
+    label: '同步覆盖率',
+    value: `${summary.value.sync_ratio}%`,
+    meta: `${summary.value.stale_user_count} 个用户处于滞后`,
+    icon: NotificationIcon,
+    color: '#0f766e',
+  },
+  {
+    label: '今日网页请求',
+    value: summary.value.today_total_requests,
+    meta: `${summary.value.month_total_requests} 次月累计请求`,
+    icon: ChartIcon,
+    color: '#7c3aed',
+  },
+  {
+    label: '月度快照',
+    value: summary.value.month_snapshot_rows,
+    meta: `${summary.value.month_snapshot_days} 个快照日`,
+    icon: AnalyticsIcon,
+    color: '#c2410c',
+  },
 ]);
 
 const buildQueryString = () => {
@@ -270,24 +295,6 @@ onMounted(async () => {
 
 .sync-meta p {
   margin: 0;
-}
-
-.summary-card {
-  min-height: 118px;
-}
-
-.summary-label {
-  margin: 0 0 10px;
-  color: #666;
-  font-size: 13px;
-}
-
-.summary-value {
-  margin: 0;
-  color: #111;
-  font-size: 28px;
-  font-weight: 700;
-  line-height: 1.15;
 }
 
 .rank-list {

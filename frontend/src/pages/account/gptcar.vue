@@ -1,6 +1,33 @@
 <template>
-  <div>
+  <div class="ops-page">
+    <admin-page-intro
+      eyebrow="Resource Pools"
+      title="账号池"
+      description="把上游账号按资源池编组，控制不同用户或策略的可见边界。"
+    />
+
+    <admin-metric-grid :items="metricCards" />
+
     <t-card class="list-card-container">
+      <div class="ops-surface__head">
+        <div>
+          <h3>账号池列表</h3>
+          <p>查看每个号池的挂载账号数和备注信息。</p>
+        </div>
+        <span class="ops-surface__badge">共 {{ pagination.total }} 个号池</span>
+      </div>
+
+      <div class="ops-filter-bar">
+        <div class="ops-filter-grid">
+          <t-input v-model="filters.search" clearable placeholder="搜索号池名称或备注" style="width: 240px" />
+        </div>
+
+        <div class="ops-filter-actions">
+          <t-button theme="primary" @click="handleSearch">查询</t-button>
+          <t-button theme="default" variant="outline" @click="handleReset">重置</t-button>
+        </div>
+      </div>
+
       <t-row justify="space-between">
         <div class="left-operation-container">
           <t-button @click="handleShowDialog()">新增</t-button>
@@ -98,10 +125,13 @@
 </template>
 
 <script setup lang="ts">
+import { AnalyticsIcon, DataDisplayIcon, LayersIcon, UsergroupIcon } from 'tdesign-icons-vue-next';
 import { FormProps, MessagePlugin, TableProps } from 'tdesign-vue-next';
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 
 import RequestApi from '@/api/request';
+import AdminMetricGrid from '@/components/admin/AdminMetricGrid.vue';
+import AdminPageIntro from '@/components/admin/AdminPageIntro.vue';
 import { TimestampToDate } from '@/utils/date';
 
 onMounted(async () => {
@@ -118,6 +148,9 @@ const gptAccountList = ref([]);
 const addFormRef = ref();
 const gptcaridDelete = ref();
 const dialogVisibleDelete = ref(false);
+const filters = reactive({
+  search: '',
+});
 
 const GptCarUri = '/0x/chatgpt/car';
 
@@ -131,6 +164,42 @@ const columns: TableProps['columns'] = [
 
   { width: 200, colKey: 'op', title: '操作' },
 ];
+
+const metricCards = computed(() => {
+  const nonEmptyCount = tableData.value.filter((item: any) => (item.gpt_account_name_list || []).length > 0).length;
+  const totalAccounts = tableData.value.reduce((sum: number, item: any) => sum + (item.gpt_account_name_list || []).length, 0);
+  const maxDepth = tableData.value.reduce((max: number, item: any) => Math.max(max, (item.gpt_account_name_list || []).length), 0);
+  return [
+    {
+      label: '账号池',
+      value: pagination.total,
+      meta: '当前后台维护中的资源池数量',
+      icon: LayersIcon,
+      color: '#1d4ed8',
+    },
+    {
+      label: '非空号池',
+      value: nonEmptyCount,
+      meta: '当前页已挂载账号的号池',
+      icon: UsergroupIcon,
+      color: '#0f766e',
+    },
+    {
+      label: '挂载账号',
+      value: totalAccounts,
+      meta: '当前页所有号池累计账号数',
+      icon: DataDisplayIcon,
+      color: '#7c3aed',
+    },
+    {
+      label: '最大池深',
+      value: maxDepth,
+      meta: '单个号池的最多账号数',
+      icon: AnalyticsIcon,
+      color: '#c2410c',
+    },
+  ];
+});
 
 const pagination = {
   defaultPageSize: 20,
@@ -182,6 +251,7 @@ const getChatCarList = async () => {
     page: pagination.defaultCurrent,
     page_size: pagination.defaultPageSize,
   };
+  if (filters.search) params.search = filters.search;
 
   const queryString = new URLSearchParams(params).toString();
   const response = await RequestApi(`${GptCarUrl}?${queryString}`);
@@ -191,6 +261,17 @@ const getChatCarList = async () => {
   tableData.value = data.results;
   pagination.total = data.count;
   tableLoading.value = false;
+};
+
+const handleSearch = async () => {
+  pagination.defaultCurrent = 1;
+  await getChatCarList();
+};
+
+const handleReset = async () => {
+  filters.search = '';
+  pagination.defaultCurrent = 1;
+  await getChatCarList();
 };
 
 const handleEdit = async (user: GptCarForm) => {

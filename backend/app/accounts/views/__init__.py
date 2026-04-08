@@ -3,6 +3,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.db.models import Q
 
 from app.accounts.models import User, VisitLog, ServicePlan
 from app.accounts.quota import assign_service_plan, build_user_quota_status, get_user_plan, sync_user_plan_snapshot
@@ -15,6 +16,15 @@ from app.page import DefaultPageNumberPagination
 from app.settings import ADMIN_USERNAME
 from app.utils import req_gateway
 from datetime import datetime
+
+
+def parse_bool_query(value):
+    value = str(value or "").strip().lower()
+    if value in {"1", "true", "yes"}:
+        return True
+    if value in {"0", "false", "no"}:
+        return False
+    return None
 
 
 def save_user_pool_bindings(user, pool_ids):
@@ -333,6 +343,23 @@ class UserAccountView(generics.ListCreateAPIView):
 
     def get(self, request, *args, **kwargs):
         queryset = User.objects.order_by("-id").all()
+        search = str(request.GET.get("search") or "").strip()
+        status = str(request.GET.get("status") or "").strip()
+        pool_mode = str(request.GET.get("pool_mode") or "").strip()
+        plan_id = str(request.GET.get("plan_id") or "").strip()
+        is_active = parse_bool_query(request.GET.get("is_active"))
+
+        if search:
+            queryset = queryset.filter(Q(username__icontains=search) | Q(email__icontains=search))
+        if status:
+            queryset = queryset.filter(status=status)
+        if pool_mode:
+            queryset = queryset.filter(pool_mode=pool_mode)
+        if plan_id.isdigit():
+            queryset = queryset.filter(plan_id=int(plan_id))
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active)
+
         pg = DefaultPageNumberPagination()
         pg.page_size_query_param = "page_size"
         page_accounts = pg.paginate_queryset(queryset, request=request)
@@ -402,6 +429,21 @@ class UserAccountView(generics.ListCreateAPIView):
 
 class VisitLogView(generics.ListAPIView):
     permission_classes = (IsAuthenticated, IsAdminUser)
-    queryset = VisitLog.objects.order_by("-id").all()
     serializer_class = ShowVisitLogModelSerializer
     pagination_class = DefaultPageNumberPagination
+
+    def get_queryset(self):
+        queryset = VisitLog.objects.order_by("-id").all()
+        search = str(self.request.GET.get("search") or "").strip()
+        log_type = str(self.request.GET.get("log_type") or "").strip()
+
+        if search:
+            queryset = queryset.filter(
+                Q(username__icontains=search)
+                | Q(ip__icontains=search)
+                | Q(chatgpt_username__icontains=search)
+            )
+        if log_type:
+            queryset = queryset.filter(log_type=log_type)
+
+        return queryset

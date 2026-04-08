@@ -65,7 +65,13 @@
         <section class="workspace-hero">
           <div class="workspace-copy">
             <p class="workspace-eyebrow">{{ sectionTitle }}</p>
-            <h1 class="workspace-title">{{ currentTitle }}</h1>
+            <div class="workspace-title-row">
+              <h1 class="workspace-title">{{ currentTitle }}</h1>
+              <div class="workspace-signals">
+                <span class="workspace-signal is-live">Live</span>
+                <span class="workspace-signal">Auto Deploy</span>
+              </div>
+            </div>
             <p class="workspace-description">{{ currentDescription }}</p>
           </div>
 
@@ -121,16 +127,21 @@ const activeTabPath = ref('');
 const { locale } = useLocale();
 
 const workspaceShortcuts = [
+  { path: '/overview', label: '总览', kicker: 'Overview' },
   { path: '/account/user', label: '用户', kicker: 'Accounts' },
-  { path: '/account/chatgpt', label: 'ChatGPT', kicker: 'Tokens' },
-  { path: '/account/gptcar', label: '号池', kicker: 'Pools' },
-  { path: '/system/login-log', label: '登录日志', kicker: 'Audit' },
+  { path: '/account/chatgpt', label: '上游账号', kicker: 'Sources' },
+  { path: '/system/usage', label: '用量', kicker: 'Usage' },
 ];
 
 const workspaceDescriptions: Record<string, string> = {
+  '/overview': '统一查看用户、上游资源、号池、套餐和今日流量，适合运营值守。',
   '/account/user': '管理登录账户、有效期、模型限制与独立会话策略。',
-  '/account/chatgpt': '维护 ChatGPT Token 与中转站凭据，快速判断当前可用状态。',
-  '/account/gptcar': '整理号池资源和绑定关系，让分配边界保持清晰。',
+  '/account/chatgpt': '维护官方账号与中转站资源，快速判断当前可调度状态。',
+  '/account/gptcar': '整理账号池资源和绑定关系，让分配边界保持清晰。',
+  '/account/plan': '维护订阅套餐、Web/API 开关与模型额度规则。',
+  '/invite': '生成可控的邀请入口，用于灰度放量和短期分发。',
+  '/system/usage': '对照模型、用户和上游账号的消耗情况，判断当前成本与异常。',
+  '/system/web-usage-sync': '同步网页端用量快照，校准用户配额和访问活跃度。',
   '/system/login-log': '核对最近的登录记录与异常访问，便于排查问题。',
 };
 
@@ -234,20 +245,27 @@ const isShortcutActive = (path: string) => route.path === path;
 
 <style lang="less" scoped>
 .admin-workspace {
-  max-width: 1320px;
+  max-width: 1540px;
   margin: 0 auto;
 }
 
 .workspace-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
   gap: 18px;
   align-items: end;
-  padding: 4px 0 28px;
+  padding: 8px 0 24px;
 }
 
 .workspace-copy {
   padding: 18px 4px 0;
+}
+
+.workspace-title-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
 }
 
 .workspace-eyebrow {
@@ -262,17 +280,43 @@ const isShortcutActive = (path: string) => route.path === path;
 .workspace-title {
   margin: 0;
   color: #181818;
-  font-size: clamp(34px, 4.6vw, 54px);
+  font-size: clamp(28px, 3.4vw, 40px);
   font-weight: 700;
   line-height: 1.02;
 }
 
 .workspace-description {
-  max-width: 560px;
-  margin: 16px 0 0;
-  color: #6b6b67;
-  font-size: 15px;
-  line-height: 1.6;
+  max-width: 680px;
+  margin: 12px 0 0;
+  color: #697386;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.workspace-signals {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workspace-signal {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #475467;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.workspace-signal.is-live {
+  border-color: rgba(16, 163, 127, 0.16);
+  background: rgba(16, 163, 127, 0.08);
+  color: #0f766e;
 }
 
 .workspace-shortcuts {
@@ -285,13 +329,15 @@ const isShortcutActive = (path: string) => route.path === path;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-height: 108px;
+  min-height: 104px;
   padding: 18px;
-  border: 1px solid rgba(17, 17, 17, 0.06);
+  border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 26px;
-  background: rgba(255, 255, 255, 0.74);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(248, 250, 252, 0.88) 100%),
+    rgba(255, 255, 255, 0.74);
   box-shadow:
-    0 18px 44px rgba(17, 17, 17, 0.05),
+    0 18px 44px rgba(15, 23, 42, 0.05),
     inset 0 1px 0 rgba(255, 255, 255, 0.82);
   color: #1a1a1a;
   cursor: pointer;
@@ -304,14 +350,14 @@ const isShortcutActive = (path: string) => route.path === path;
 
 .workspace-shortcut:hover {
   transform: translateY(-1px);
-  border-color: rgba(17, 17, 17, 0.12);
-  box-shadow: 0 20px 48px rgba(17, 17, 17, 0.07);
+  border-color: rgba(15, 23, 42, 0.12);
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.07);
 }
 
 .workspace-shortcut.active {
-  border-color: rgba(16, 163, 127, 0.18);
+  border-color: rgba(16, 163, 127, 0.22);
   box-shadow:
-    0 20px 48px rgba(17, 17, 17, 0.06),
+    0 20px 48px rgba(15, 23, 42, 0.06),
     inset 0 0 0 1px rgba(16, 163, 127, 0.14);
 }
 

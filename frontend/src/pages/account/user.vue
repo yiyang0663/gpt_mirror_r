@@ -1,7 +1,50 @@
 <!-- eslint-disable camelcase -->
 <template>
-  <div>
+  <div class="ops-page">
+    <admin-page-intro
+      eyebrow="Users & Access"
+      title="用户管理"
+      description="统一维护站点登录账户、套餐绑定、号池策略和模型限制。"
+    />
+
+    <admin-metric-grid :items="metricCards" />
+
     <t-card class="list-card-container">
+      <div class="ops-surface__head">
+        <div>
+          <h3>用户列表</h3>
+          <p>按用户查看套餐、账号池模式、独立会话和最近登录情况。</p>
+        </div>
+        <span class="ops-surface__badge">共 {{ pagination.total }} 个用户</span>
+      </div>
+
+      <div class="ops-filter-bar">
+        <div class="ops-filter-grid">
+          <t-input v-model="filters.search" clearable placeholder="搜索用户名或邮箱" style="width: 220px" />
+          <t-select v-model="filters.status" clearable placeholder="账户状态" style="width: 150px">
+            <t-option label="正常" value="active" />
+            <t-option label="停用" value="disabled" />
+            <t-option label="过期" value="expired" />
+          </t-select>
+          <t-select v-model="filters.pool_mode" clearable placeholder="账号池模式" style="width: 160px">
+            <t-option label="公共账号池" value="public_pool" />
+            <t-option label="指定号池" value="specific_pools" />
+          </t-select>
+          <t-select v-model="filters.is_active" clearable placeholder="启用状态" style="width: 140px">
+            <t-option label="启用" value="true" />
+            <t-option label="停用" value="false" />
+          </t-select>
+          <t-select v-model="filters.plan_id" clearable placeholder="套餐" style="width: 180px">
+            <t-option v-for="item in planList" :key="item.id" :label="item.name" :value="String(item.id)" />
+          </t-select>
+        </div>
+
+        <div class="ops-filter-actions">
+          <t-button theme="primary" @click="handleSearch">查询</t-button>
+          <t-button theme="default" variant="outline" @click="handleReset">重置</t-button>
+        </div>
+      </div>
+
       <t-row justify="space-between">
         <div class="left-operation-container">
           <!-- <t-button @click="$router.push('/login')">访问</t-button> -->
@@ -297,11 +340,13 @@
 
 <script setup lang="ts">
 import dayjs from 'dayjs';
-import { AddIcon, DeleteIcon, UserCircleIcon } from 'tdesign-icons-vue-next';
+import { AddIcon, AnalyticsIcon, DataDisplayIcon, DeleteIcon, SecuredIcon, UserCircleIcon, UsergroupIcon } from 'tdesign-icons-vue-next';
 import { CustomValidator, FormProps, MessagePlugin, TableProps } from 'tdesign-vue-next';
-import { ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 
 import RequestApi from '@/api/request';
+import AdminMetricGrid from '@/components/admin/AdminMetricGrid.vue';
+import AdminPageIntro from '@/components/admin/AdminPageIntro.vue';
 
 import UserChatgptDetailsComponent from './user_chatgpt.vue';
 
@@ -331,6 +376,13 @@ const GptCarEnumUri = '/0x/chatgpt/car-enum';
 const PlanEnumUri = '/0x/plan/enum';
 const selectedRowKeys = ref<TableProps['selectedRowKeys']>([]);
 const showChatGPTDetailsDialog = ref(false);
+const filters = reactive({
+  search: '',
+  status: '',
+  pool_mode: '',
+  is_active: '',
+  plan_id: '',
+});
 
 interface TokenUserForm {
   is_active: boolean;
@@ -387,6 +439,42 @@ const columns: TableProps['columns'] = [
   { colKey: 'remark', title: '备注', width: 200 },
   { width: 200, colKey: 'op', title: '操作' },
 ];
+
+const metricCards = computed(() => {
+  const activeCount = tableData.value.filter((item: any) => item.is_active && item.status !== 'disabled').length;
+  const isolatedCount = tableData.value.filter((item: any) => item.isolated_session).length;
+  const specificPoolCount = tableData.value.filter((item: any) => item.pool_mode === 'specific_pools').length;
+  return [
+    {
+      label: '用户总数',
+      value: pagination.total,
+      meta: '后台当前可管理的登录账户',
+      icon: UsergroupIcon,
+      color: '#1d4ed8',
+    },
+    {
+      label: '当前页启用',
+      value: activeCount,
+      meta: '本页状态正常的用户',
+      icon: SecuredIcon,
+      color: '#0f766e',
+    },
+    {
+      label: '指定号池',
+      value: specificPoolCount,
+      meta: '当前页使用专属资源池的用户',
+      icon: DataDisplayIcon,
+      color: '#7c3aed',
+    },
+    {
+      label: '独立会话',
+      value: isolatedCount,
+      meta: `${selectedRowKeys.value.length} 个用户已选中`,
+      icon: AnalyticsIcon,
+      color: '#c2410c',
+    },
+  ];
+});
 
 const modelLimitValidator: CustomValidator = (val) => {
   for (const item of val) {
@@ -488,6 +576,11 @@ const getUserList = async () => {
     page: pagination.defaultCurrent,
     page_size: pagination.defaultPageSize,
   };
+  if (filters.search) params.search = filters.search;
+  if (filters.status) params.status = filters.status;
+  if (filters.pool_mode) params.pool_mode = filters.pool_mode;
+  if (filters.is_active) params.is_active = filters.is_active;
+  if (filters.plan_id) params.plan_id = filters.plan_id;
 
   const queryString = new URLSearchParams(params).toString();
   const response = await RequestApi(`${UserAccountUri}?${queryString}`);
@@ -496,6 +589,21 @@ const getUserList = async () => {
   tableData.value = data.results;
   pagination.total = data.count;
   tableLoading.value = false;
+};
+
+const handleSearch = async () => {
+  pagination.defaultCurrent = 1;
+  await getUserList();
+};
+
+const handleReset = async () => {
+  filters.search = '';
+  filters.status = '';
+  filters.pool_mode = '';
+  filters.is_active = '';
+  filters.plan_id = '';
+  pagination.defaultCurrent = 1;
+  await getUserList();
 };
 
 const handleConfirm = async () => {
@@ -637,7 +745,10 @@ const getChatGPTDetails = async (user: any) => {
   userChatgptDetailsRef.value.getChatGPTDetails(user);
 };
 
-getUserList();
+onMounted(async () => {
+  await getPlanEnum();
+  await getUserList();
+});
 </script>
 
 <style lang="less" scoped>

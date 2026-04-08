@@ -1,4 +1,5 @@
 from rest_framework import generics
+from django.db.models import Q
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -11,6 +12,15 @@ from app.chatgpt.serializers import ShowChatgptTokenSerializer, AddChatgptTokenS
 from app.page import DefaultPageNumberPagination
 from app.utils import save_visit_log, req_gateway, get_client_ip
 from rest_framework.exceptions import ValidationError
+
+
+def parse_bool_query(value):
+    value = str(value or "").strip().lower()
+    if value in {"1", "true", "yes"}:
+        return True
+    if value in {"0", "false", "no"}:
+        return False
+    return None
 
 
 class ChatGPTAccountEnum(APIView):
@@ -28,6 +38,29 @@ class ChatGPTAccountView(generics.ListCreateAPIView):
 
     def get(self, request, *args, **kwargs):
         queryset = ChatgptAccount.objects.order_by("-id").all()
+        search = str(request.GET.get("search") or "").strip()
+        account_type = str(request.GET.get("account_type") or "").strip()
+        health_status = str(request.GET.get("health_status") or "").strip()
+        source_type = str(request.GET.get("source_type") or "").strip()
+        auth_status = parse_bool_query(request.GET.get("auth_status"))
+        enabled_for_web = parse_bool_query(request.GET.get("enabled_for_web"))
+        enabled_for_api = parse_bool_query(request.GET.get("enabled_for_api"))
+
+        if search:
+            queryset = queryset.filter(Q(chatgpt_username__icontains=search) | Q(plan_type__icontains=search))
+        if account_type:
+            queryset = queryset.filter(account_type=account_type)
+        if health_status:
+            queryset = queryset.filter(health_status=health_status)
+        if source_type:
+            queryset = queryset.filter(source_type=source_type)
+        if auth_status is not None:
+            queryset = queryset.filter(auth_status=auth_status)
+        if enabled_for_web is not None:
+            queryset = queryset.filter(enabled_for_web=enabled_for_web)
+        if enabled_for_api is not None:
+            queryset = queryset.filter(enabled_for_api=enabled_for_api)
+
         pg = DefaultPageNumberPagination()
         pg.page_size_query_param = "page_size"
         page_accounts = pg.paginate_queryset(queryset, request=request)

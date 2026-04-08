@@ -19,7 +19,7 @@ router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore();
   userStore.hydrateAuthState();
   const isAuthEntryRoute = ['/login', '/register', '/invite_register'].includes(to.path);
-  const authenticatedHomePath = userStore.is_admin ? '/account/user' : '/customer/chat';
+  const authenticatedHomePath = userStore.is_admin ? '/overview' : '/customer/chat';
 
   if (userStore.token) {
     if (isAuthEntryRoute) {

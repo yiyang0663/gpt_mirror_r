@@ -359,7 +359,7 @@ const onSubmit: FormProps['onSubmit'] = async ({ validateResult, firstError }) =
   }
   const data = await userStore.login(url, payload);
   if (data?.admin_token && data.is_admin) {
-    router.push({ name: 'User' });
+    router.push({ name: 'AdminOverview' });
     return;
   }
   if (data?.admin_token) {
