@@ -804,6 +804,7 @@ onMounted(async () => {
 
 <style scoped lang="less">
 .consumer-chat {
+  --chat-column-width: 820px;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   height: 100%;
@@ -916,7 +917,8 @@ onMounted(async () => {
 }
 
 .composer-panel {
-  width: min(100%, 780px);
+  width: min(100%, var(--chat-column-width));
+  margin: 0 auto;
   padding: 12px 14px 10px;
   border: 1px solid rgba(17, 17, 17, 0.08);
   border-radius: 28px;
@@ -1031,7 +1033,7 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  width: min(100%, 780px);
+  width: min(100%, var(--chat-column-width));
 }
 
 .starter-card {
@@ -1085,7 +1087,7 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
   gap: 14px;
-  width: min(100%, 820px);
+  width: min(100%, var(--chat-column-width));
   margin: 0 auto;
 }
 
