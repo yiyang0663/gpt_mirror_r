@@ -242,6 +242,7 @@ class ChatCompletionsProxyView(APIView):
         role_sent = False
         stream_finished = False
         latest_usage = {}
+        streamed_text = ""
 
         try:
             for raw_line in proxy_response.iter_lines(decode_unicode=True):
@@ -282,8 +283,8 @@ class ChatCompletionsProxyView(APIView):
                         yield encoded_chunk
                     continue
 
-                if payload_type == "response.output_text.delta":
-                    delta_text = str(payload.get("delta") or "")
+                if payload_type in {"response.output_text.delta", "response.output_text.done"}:
+                    delta_text = str(payload.get("delta") or payload.get("text") or "")
                     if not delta_text:
                         continue
                     if not role_sent:
@@ -308,6 +309,7 @@ class ChatCompletionsProxyView(APIView):
                         )
                     )
                     capture_size = cls._append_capture(capture_chunks, capture_size, encoded_delta_chunk)
+                    streamed_text += delta_text
                     yield encoded_delta_chunk
                     continue
 
@@ -319,6 +321,40 @@ class ChatCompletionsProxyView(APIView):
                     usage_payload = cls._extract_usage_payload(response_payload.get("usage"))
                     if usage_payload:
                         latest_usage = usage_payload
+
+                    final_text = cls._extract_response_output_text(response_payload)
+                    remaining_text = ""
+                    if final_text:
+                        if not streamed_text:
+                            remaining_text = final_text
+                        elif final_text.startswith(streamed_text):
+                            remaining_text = final_text[len(streamed_text):]
+
+                    if remaining_text:
+                        if not role_sent:
+                            encoded_role_chunk = cls._encode_sse_payload(
+                                cls._build_chat_completion_chunk(
+                                    response_id,
+                                    created_at,
+                                    response_model,
+                                    delta={"role": "assistant"},
+                                )
+                            )
+                            capture_size = cls._append_capture(capture_chunks, capture_size, encoded_role_chunk)
+                            role_sent = True
+                            yield encoded_role_chunk
+
+                        encoded_delta_chunk = cls._encode_sse_payload(
+                            cls._build_chat_completion_chunk(
+                                response_id,
+                                created_at,
+                                response_model,
+                                delta={"content": remaining_text},
+                            )
+                        )
+                        capture_size = cls._append_capture(capture_chunks, capture_size, encoded_delta_chunk)
+                        streamed_text += remaining_text
+                        yield encoded_delta_chunk
 
                     encoded_finish_chunk = cls._encode_sse_payload(
                         cls._build_chat_completion_chunk(
