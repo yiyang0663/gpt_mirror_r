@@ -159,6 +159,10 @@ class ChatCompletionsProxyView(APIView):
                     text_parts.append(str(content_item.get("text") or ""))
         return "".join(text_parts)
 
+    @staticmethod
+    def _is_chat_completion_payload(payload):
+        return isinstance(payload, dict) and isinstance(payload.get("choices"), list)
+
     @classmethod
     def _build_chat_completion_payload(cls, payload, request_model=""):
         usage_payload = cls._extract_usage_payload(payload.get("usage"))
@@ -243,6 +247,7 @@ class ChatCompletionsProxyView(APIView):
         stream_finished = False
         latest_usage = {}
         streamed_text = ""
+        stream_mode = ""
 
         try:
             for raw_line in proxy_response.iter_lines(decode_unicode=True):
@@ -251,7 +256,16 @@ class ChatCompletionsProxyView(APIView):
                     continue
 
                 payload_text = line[5:].strip()
-                if not payload_text or payload_text == "[DONE]":
+                if not payload_text:
+                    continue
+
+                if payload_text == "[DONE]":
+                    if stream_mode == "chat.completions":
+                        done_chunk = b"data: [DONE]\n\n"
+                        capture_size = cls._append_capture(capture_chunks, capture_size, done_chunk)
+                        stream_finished = True
+                        yield done_chunk
+                        break
                     continue
 
                 try:
@@ -259,7 +273,19 @@ class ChatCompletionsProxyView(APIView):
                 except json.JSONDecodeError:
                     continue
 
+                if cls._is_chat_completion_payload(payload):
+                    stream_mode = "chat.completions"
+                    passthrough_chunk = f"data: {payload_text}\n\n".encode("utf-8")
+                    capture_size = cls._append_capture(capture_chunks, capture_size, passthrough_chunk)
+                    if payload.get("choices", [{}])[0].get("finish_reason"):
+                        stream_finished = True
+                    yield passthrough_chunk
+                    continue
+
                 payload_type = str(payload.get("type") or "").strip()
+                if payload_type.startswith("response."):
+                    stream_mode = "responses"
+
                 if payload_type in {"response.created", "response.in_progress"}:
                     response_payload = payload.get("response") or {}
                     response_id = response_payload.get("id") or response_id
@@ -463,10 +489,11 @@ class ChatCompletionsProxyView(APIView):
                     response_payload = json.loads(response_body.decode("utf-8"))
                 except (UnicodeDecodeError, json.JSONDecodeError):
                     response_payload = {}
-                response_body = json.dumps(
-                    ChatCompletionsProxyView._build_chat_completion_payload(response_payload, request_model=request_model),
-                    ensure_ascii=False,
-                ).encode("utf-8")
+                if not ChatCompletionsProxyView._is_chat_completion_payload(response_payload):
+                    response_body = json.dumps(
+                        ChatCompletionsProxyView._build_chat_completion_payload(response_payload, request_model=request_model),
+                        ensure_ascii=False,
+                    ).encode("utf-8")
                 content_type = "application/json"
             else:
                 response_body = ChatCompletionsProxyView._normalize_error_response_body(response_body)
