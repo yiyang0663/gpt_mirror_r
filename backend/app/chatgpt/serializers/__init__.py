@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from app.chatgpt.content_blocks import extract_text_from_content_blocks, normalize_chat_content_blocks
 from app.chatgpt.models import (
     ChatConversation,
     ChatConversationMessage,
@@ -219,6 +220,7 @@ class ShowChatConversationMessageSerializer(serializers.ModelSerializer):
             "id",
             "role",
             "content",
+            "content_blocks",
             "account_label",
             "sequence",
             "created_time",
@@ -233,6 +235,7 @@ class ShowChatConversationSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "model_name",
+            "reasoning_effort",
             "preview_text",
             "message_count",
             "last_message_at",
@@ -251,6 +254,7 @@ class ShowChatConversationDetailSerializer(ShowChatConversationSerializer):
 class CreateChatConversationSerializer(serializers.Serializer):
     title = serializers.CharField(required=False, allow_blank=True, default="")
     model_name = serializers.CharField(required=False, allow_blank=True, default="")
+    reasoning_effort = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class SyncChatConversationMessageSerializer(serializers.Serializer):
@@ -262,10 +266,21 @@ class SyncChatConversationMessageSerializer(serializers.Serializer):
         ]
     )
     content = serializers.CharField(required=False, allow_blank=True, default="")
+    content_blocks = serializers.JSONField(required=False, default=list)
     account_label = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs):
+        normalized_blocks = normalize_chat_content_blocks(
+            attrs.get("content_blocks", []),
+            fallback_text=attrs.get("content", ""),
+        )
+        attrs["content_blocks"] = normalized_blocks
+        attrs["content"] = extract_text_from_content_blocks(normalized_blocks)
+        return attrs
 
 
 class SyncChatConversationSerializer(serializers.Serializer):
     title = serializers.CharField(required=False, allow_blank=True, default="")
     model_name = serializers.CharField(required=False, allow_blank=True, default="")
+    reasoning_effort = serializers.CharField(required=False, allow_blank=True, default="")
     messages = SyncChatConversationMessageSerializer(many=True, required=False, default=list)

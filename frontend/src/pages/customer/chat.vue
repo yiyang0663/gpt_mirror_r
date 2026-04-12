@@ -1,15 +1,35 @@
 <template>
   <div class="consumer-chat">
     <header class="workspace-head">
-      <label class="model-switch">
-        <span class="model-switch-brand">ChatGPT</span>
-        <select v-model="selectedModel" class="model-switch-select" :disabled="isComposerBusy">
-          <option v-for="item in modelOptions" :key="item" :value="item">{{ item }}</option>
-        </select>
-      </label>
+      <div class="workspace-controls">
+        <label class="model-switch">
+          <span class="model-switch-brand">ChatGPT</span>
+          <select v-model="selectedModel" class="model-switch-select" :disabled="isComposerBusy">
+            <option v-for="item in modelOptions" :key="item" :value="item">{{ item }}</option>
+          </select>
+        </label>
+
+        <label class="reasoning-switch">
+          <span class="reasoning-switch-label">思考</span>
+          <select v-model="selectedReasoning" class="reasoning-switch-select" :disabled="isComposerBusy">
+            <option v-for="item in reasoningOptions" :key="item.value" :value="item.value">
+              {{ item.label }} · {{ item.description }}
+            </option>
+          </select>
+        </label>
+      </div>
 
       <p v-if="!sessionSummary.available" class="workspace-status">{{ statusMessage }}</p>
     </header>
+
+    <input
+      ref="fileInputRef"
+      class="composer-file-input"
+      type="file"
+      multiple
+      :accept="attachmentAccept"
+      @change="handleAttachmentSelect"
+    />
 
     <div v-if="conversationLoading" class="workspace-loading">正在载入这段对话…</div>
 
@@ -20,8 +40,37 @@
       </div>
 
       <section class="composer-panel composer-panel-empty">
+        <div v-if="pendingAttachments.length" class="composer-attachments">
+          <div
+            v-for="attachment in pendingAttachments"
+            :key="attachment.id"
+            class="composer-attachment"
+            :class="attachment.kind"
+          >
+            <div v-if="attachment.kind === 'image'" class="composer-attachment-thumb">
+              <img :src="attachment.dataUrl" :alt="attachment.name" />
+            </div>
+            <div v-else class="composer-attachment-icon" v-html="uiIcons.file"></div>
+
+            <div class="composer-attachment-copy">
+              <strong>{{ attachment.name }}</strong>
+              <span>{{ formatBytes(attachment.size) || '附件' }}</span>
+            </div>
+
+            <button class="composer-attachment-remove" type="button" @click="removePendingAttachment(attachment.id)">
+              <span v-html="uiIcons.close"></span>
+            </button>
+          </div>
+        </div>
+
         <div class="composer-frame">
-          <button class="composer-utility" type="button" disabled aria-label="附件能力稍后开放">
+          <button
+            class="composer-utility"
+            type="button"
+            :disabled="!sessionSummary.available || isComposerBusy"
+            aria-label="上传图片或文件"
+            @click="triggerAttachmentPicker"
+          >
             <span v-html="uiIcons.plus"></span>
           </button>
 
@@ -42,7 +91,10 @@
         </div>
 
         <div class="composer-meta">
-          <p class="composer-disclaimer" :class="{ warning: !sessionSummary.available }">{{ composerDisclaimer }}</p>
+          <div class="composer-meta-copy">
+            <p class="composer-disclaimer" :class="{ warning: !sessionSummary.available }">{{ composerDisclaimer }}</p>
+            <p v-if="composerSupportNote" class="composer-support-note">{{ composerSupportNote }}</p>
+          </div>
           <button v-if="pending" class="stop-button" type="button" @click="stopGeneration">停止生成</button>
         </div>
       </section>
@@ -78,7 +130,36 @@
                 class="message-rich"
                 v-html="renderAssistantMessage(item.content || (item.pending ? '正在生成回复…' : '暂无内容'))"
               ></div>
-              <p v-else class="message-content">{{ item.content || (item.pending ? '正在生成回复…' : '暂无内容') }}</p>
+              <div v-else class="message-user-payload">
+                <p v-if="extractMessageText(item)" class="message-content">{{ extractMessageText(item) }}</p>
+
+                <div v-if="getMessageAttachmentBlocks(item).length" class="message-attachment-grid">
+                  <a
+                    v-for="block in getMessageAttachmentBlocks(item)"
+                    :key="`${item.id}-${getAttachmentName(block)}-${getAttachmentUrl(block)}`"
+                    class="message-attachment-card"
+                    :class="{ image: isImageAttachmentBlock(block) }"
+                    :href="getAttachmentUrl(block)"
+                    :download="getAttachmentName(block)"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <img
+                      v-if="isImageAttachmentBlock(block)"
+                      class="message-attachment-image"
+                      :src="getAttachmentUrl(block)"
+                      :alt="getAttachmentName(block)"
+                    />
+                    <template v-else>
+                      <div class="message-attachment-icon" v-html="uiIcons.file"></div>
+                      <div class="message-attachment-copy">
+                        <strong>{{ getAttachmentName(block) }}</strong>
+                        <span>{{ formatBytes(getAttachmentSize(block)) || '文件' }}</span>
+                      </div>
+                    </template>
+                  </a>
+                </div>
+              </div>
             </div>
 
             <div v-if="!item.pending && item.content.trim()" class="message-actions">
@@ -98,8 +179,37 @@
 
       <footer class="composer-shell">
         <section class="composer-panel">
+          <div v-if="pendingAttachments.length" class="composer-attachments">
+            <div
+              v-for="attachment in pendingAttachments"
+              :key="attachment.id"
+              class="composer-attachment"
+              :class="attachment.kind"
+            >
+              <div v-if="attachment.kind === 'image'" class="composer-attachment-thumb">
+                <img :src="attachment.dataUrl" :alt="attachment.name" />
+              </div>
+              <div v-else class="composer-attachment-icon" v-html="uiIcons.file"></div>
+
+              <div class="composer-attachment-copy">
+                <strong>{{ attachment.name }}</strong>
+                <span>{{ formatBytes(attachment.size) || '附件' }}</span>
+              </div>
+
+              <button class="composer-attachment-remove" type="button" @click="removePendingAttachment(attachment.id)">
+                <span v-html="uiIcons.close"></span>
+              </button>
+            </div>
+          </div>
+
           <div class="composer-frame">
-            <button class="composer-utility" type="button" disabled aria-label="附件能力稍后开放">
+            <button
+              class="composer-utility"
+              type="button"
+              :disabled="!sessionSummary.available || isComposerBusy"
+              aria-label="上传图片或文件"
+              @click="triggerAttachmentPicker"
+            >
               <span v-html="uiIcons.plus"></span>
             </button>
 
@@ -120,7 +230,10 @@
           </div>
 
           <div class="composer-meta">
-            <p class="composer-disclaimer" :class="{ warning: !sessionSummary.available }">{{ composerDisclaimer }}</p>
+            <div class="composer-meta-copy">
+              <p class="composer-disclaimer" :class="{ warning: !sessionSummary.available }">{{ composerDisclaimer }}</p>
+              <p v-if="composerSupportNote" class="composer-support-note">{{ composerSupportNote }}</p>
+            </div>
             <button v-if="pending" class="stop-button" type="button" @click="stopGeneration">停止生成</button>
           </div>
         </section>
@@ -137,6 +250,7 @@ import { useRoute, useRouter } from 'vue-router';
 import LogoOpenai from '@/assets/openai-logo.svg';
 import {
   type CustomerConversationDetail,
+  type CustomerConversationMessageContentBlock,
   type CustomerConversationSummary,
   useCustomerConversations,
 } from '@/composables/use-customer-conversations';
@@ -165,9 +279,30 @@ interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  contentBlocks: CustomerConversationMessageContentBlock[];
   pending?: boolean;
   accountLabel?: string;
 }
+
+interface ComposerAttachment {
+  id: string;
+  kind: 'image' | 'file';
+  name: string;
+  mimeType: string;
+  size: number;
+  dataUrl: string;
+}
+
+interface ReasoningOption {
+  value: string;
+  label: string;
+  description: string;
+}
+
+const MAX_ATTACHMENTS_PER_MESSAGE = 4;
+const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
+const MAX_FILE_SIZE_BYTES = 12 * 1024 * 1024;
+const ACCEPTED_ATTACHMENT_TYPES = 'image/*,.pdf,.txt,.md,.csv,.json,.doc,.docx,.xls,.xlsx,.ppt,.pptx';
 
 const router = useRouter();
 const route = useRoute();
@@ -180,6 +315,12 @@ const uiIcons = {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 5 5 5"></path><path d="m12 5-5 5"></path><path d="M12 5v14"></path></svg>',
   stop:
     '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"></rect></svg>',
+  close:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>',
+  file:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"></path><path d="M14 2v5h5"></path></svg>',
+  image:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><circle cx="8.5" cy="9.5" r="1.5"></circle><path d="m21 15-5-5L5 20"></path></svg>',
 };
 
 const sessionSummary = ref<SessionSummary>({
@@ -194,6 +335,7 @@ const sessionSummary = ref<SessionSummary>({
   },
 });
 const selectedModel = ref('gpt-5.4');
+const selectedReasoning = ref('medium');
 const draft = ref('');
 const pending = ref(false);
 const sending = ref(false);
@@ -202,11 +344,13 @@ const currentEntry = ref<ConsumerChatEntry | null>(null);
 const messageViewportRef = ref<HTMLElement | null>(null);
 const composerInputRef = ref<HTMLTextAreaElement | null>(null);
 const threadComposerInputRef = ref<HTMLTextAreaElement | null>(null);
+const fileInputRef = ref<HTMLInputElement | null>(null);
 const activeAbortController = ref<AbortController | null>(null);
 const conversationLoading = ref(false);
 const modelOptions = ref<string[]>([]);
 const lastHandledNewQuery = ref('');
 const lastHandledPrefill = ref('');
+const pendingAttachments = ref<ComposerAttachment[]>([]);
 
 const promptIdeas = [
   {
@@ -227,6 +371,35 @@ const promptIdeas = [
   },
 ];
 
+const defaultReasoningValueForModel = (modelName: string) => {
+  return /codex/i.test(modelName) ? 'medium' : 'medium';
+};
+
+const buildReasoningOptions = (modelName: string): ReasoningOption[] => {
+  if (/codex/i.test(modelName)) {
+    return [
+      { value: 'low', label: '轻度', description: '更快返回' },
+      { value: 'medium', label: '标准', description: '默认平衡' },
+      { value: 'high', label: '深入', description: '更多推理' },
+      { value: 'xhigh', label: '极深', description: '最重推理' },
+    ];
+  }
+
+  return [
+    { value: 'minimal', label: '极快', description: '最低思考开销' },
+    { value: 'low', label: '轻度', description: '更快返回' },
+    { value: 'medium', label: '标准', description: '默认平衡' },
+    { value: 'high', label: '深入', description: '更多推理' },
+  ];
+};
+
+const reasoningOptions = computed(() => buildReasoningOptions(selectedModel.value));
+const selectedReasoningMeta = computed(() => {
+  return reasoningOptions.value.find((item) => item.value === selectedReasoning.value) || reasoningOptions.value[0];
+});
+
+const attachmentAccept = ACCEPTED_ATTACHMENT_TYPES;
+
 const uniqModelOptions = (items: string[]) => {
   const modelSet = new Set<string>();
   items.forEach((item) => {
@@ -240,9 +413,235 @@ const uniqModelOptions = (items: string[]) => {
 
 const createMessageId = (role: ChatMessage['role']) => `${role}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 
+const createAttachmentId = () => `attachment-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+
 const formatSourceType = (sourceType: string) => {
   if (sourceType === 'relay') return '中转';
   return '官方';
+};
+
+const normalizeReasoningSelection = (modelName = selectedModel.value, nextValue = selectedReasoning.value) => {
+  const nextOptions = buildReasoningOptions(modelName);
+  if (nextOptions.some((item) => item.value === nextValue)) {
+    return nextValue;
+  }
+  return defaultReasoningValueForModel(modelName);
+};
+
+const createTextContentBlock = (text: string): CustomerConversationMessageContentBlock | null => {
+  const normalized = String(text || '');
+  if (!normalized.trim()) {
+    return null;
+  }
+  return {
+    type: 'text',
+    text: normalized,
+  };
+};
+
+const attachmentToContentBlock = (attachment: ComposerAttachment): CustomerConversationMessageContentBlock => {
+  if (attachment.kind === 'image') {
+    return {
+      type: 'image_url',
+      image_url: {
+        url: attachment.dataUrl,
+        detail: 'auto',
+      },
+    };
+  }
+
+  return {
+    type: 'file',
+    file: {
+      filename: attachment.name,
+      mime_type: attachment.mimeType,
+      size: attachment.size,
+      file_data: attachment.dataUrl,
+    },
+  };
+};
+
+const normalizeContentBlocks = (
+  contentBlocks: CustomerConversationMessageContentBlock[] | null | undefined,
+  fallbackText = '',
+): CustomerConversationMessageContentBlock[] => {
+  const normalizedBlocks = Array.isArray(contentBlocks)
+    ? contentBlocks
+        .map((item) => {
+          if (!item || typeof item !== 'object') {
+            return null;
+          }
+
+          if (item.type === 'text') {
+            return createTextContentBlock(item.text || '');
+          }
+
+          if (item.type === 'image_url') {
+            const imageUrl = String(item.image_url?.url || '').trim();
+            if (!imageUrl) {
+              return null;
+            }
+            return {
+              type: 'image_url',
+              image_url: {
+                url: imageUrl,
+                ...(item.image_url?.detail ? { detail: item.image_url.detail } : {}),
+              },
+            } satisfies CustomerConversationMessageContentBlock;
+          }
+
+          if (item.type === 'file') {
+            const file = item.file || {};
+            if (!(file.file_data || file.file_id || file.file_url)) {
+              return null;
+            }
+            return {
+              type: 'file',
+              file: {
+                ...(file.filename ? { filename: file.filename } : {}),
+                ...(file.mime_type ? { mime_type: file.mime_type } : {}),
+                ...(typeof file.size === 'number' ? { size: file.size } : {}),
+                ...(file.file_data ? { file_data: file.file_data } : {}),
+                ...(file.file_id ? { file_id: file.file_id } : {}),
+                ...(file.file_url ? { file_url: file.file_url } : {}),
+              },
+            } satisfies CustomerConversationMessageContentBlock;
+          }
+
+          return null;
+        })
+        .filter(Boolean)
+    : [];
+
+  if (normalizedBlocks.length) {
+    return normalizedBlocks as CustomerConversationMessageContentBlock[];
+  }
+
+  const fallbackBlock = createTextContentBlock(fallbackText);
+  return fallbackBlock ? [fallbackBlock] : [];
+};
+
+const buildUserMessageContentBlocks = (text: string, attachments: ComposerAttachment[]) => {
+  const nextBlocks: CustomerConversationMessageContentBlock[] = [];
+  const textBlock = createTextContentBlock(text);
+  if (textBlock) {
+    nextBlocks.push(textBlock);
+  }
+  attachments.forEach((item) => {
+    nextBlocks.push(attachmentToContentBlock(item));
+  });
+  return nextBlocks;
+};
+
+const extractMessageText = (message: Pick<ChatMessage, 'content' | 'contentBlocks'>) => {
+  const textParts = normalizeContentBlocks(message.contentBlocks).flatMap((item) => {
+    if (item.type !== 'text') {
+      return [];
+    }
+    return item.text ? [item.text] : [];
+  });
+
+  if (textParts.length) {
+    return textParts.join('').trim();
+  }
+  return String(message.content || '').trim();
+};
+
+const getMessageAttachmentBlocks = (message: Pick<ChatMessage, 'contentBlocks'>) => {
+  return normalizeContentBlocks(message.contentBlocks).filter((item) => item.type === 'image_url' || item.type === 'file');
+};
+
+const hasRenderableMessageContent = (message: Pick<ChatMessage, 'role' | 'content' | 'contentBlocks'>) => {
+  if (message.role === 'assistant') {
+    return Boolean(String(message.content || '').trim());
+  }
+  return Boolean(extractMessageText(message) || getMessageAttachmentBlocks(message).length);
+};
+
+const serializeRequestMessageContent = (message: ChatMessage) => {
+  const contentBlocks = normalizeContentBlocks(message.contentBlocks, message.content);
+  const attachmentBlocks = contentBlocks.filter((item) => item.type !== 'text');
+
+  if (!attachmentBlocks.length) {
+    return extractMessageText(message);
+  }
+
+  return contentBlocks;
+};
+
+const buildMessageFromPersistedItem = (
+  item: CustomerConversationDetail['messages'][number],
+): ChatMessage => {
+  const contentBlocks = normalizeContentBlocks(item.content_blocks, item.content);
+  return {
+    id: `persisted-${item.id}`,
+    role: item.role,
+    content: extractMessageText({
+      content: item.content,
+      contentBlocks,
+    }),
+    contentBlocks,
+    accountLabel: item.account_label,
+  };
+};
+
+const formatBytes = (value: number) => {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '';
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(value < 1024 * 100 ? 0 : 1)} KB`;
+  }
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const getAttachmentName = (block: CustomerConversationMessageContentBlock) => {
+  if (block.type === 'image_url') {
+    return '图片';
+  }
+  return block.file?.filename || '附件';
+};
+
+const getAttachmentSize = (block: CustomerConversationMessageContentBlock) => {
+  return typeof block.file?.size === 'number' ? block.file.size : 0;
+};
+
+const getAttachmentUrl = (block: CustomerConversationMessageContentBlock) => {
+  if (block.type === 'image_url') {
+    return block.image_url?.url || '';
+  }
+  return block.file?.file_data || block.file?.file_url || '';
+};
+
+const isImageAttachmentBlock = (block: CustomerConversationMessageContentBlock) => block.type === 'image_url';
+
+const readFileAsDataUrl = (file: File) => {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error(`读取文件失败: ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+};
+
+const getAttachmentSizeLimit = (file: File) => (file.type.startsWith('image/') ? MAX_IMAGE_SIZE_BYTES : MAX_FILE_SIZE_BYTES);
+
+const buildComposerAttachment = async (file: File): Promise<ComposerAttachment | null> => {
+  const sizeLimit = getAttachmentSizeLimit(file);
+  if (file.size > sizeLimit) {
+    MessagePlugin.warning(`${file.name} 超出大小限制，单文件请控制在 ${formatBytes(sizeLimit)} 以内`);
+    return null;
+  }
+
+  const dataUrl = await readFileAsDataUrl(file);
+  return {
+    id: createAttachmentId(),
+    kind: file.type.startsWith('image/') ? 'image' : 'file',
+    name: file.name,
+    mimeType: file.type || 'application/octet-stream',
+    size: file.size,
+    dataUrl,
+  };
 };
 
 const statusMessage = computed(() => {
@@ -253,6 +652,13 @@ const statusMessage = computed(() => {
 
 const composerDisclaimer = computed(() => {
   return sessionSummary.value.available ? 'ChatGPT 可能会犯错，请核查重要信息。' : statusMessage.value;
+});
+
+const composerSupportNote = computed(() => {
+  if (!sessionSummary.value.available) {
+    return '';
+  }
+  return `支持图片、PDF 和常见文档，当前思考等级：${selectedReasoningMeta.value?.label || '标准'}`;
 });
 
 const renderAssistantMessage = (content: string) => {
@@ -269,7 +675,7 @@ const isComposerBusy = computed(() => {
 });
 
 const canSend = computed(() => {
-  return Boolean(draft.value.trim()) && sessionSummary.value.available && !isComposerBusy.value;
+  return Boolean(draft.value.trim() || pendingAttachments.value.length) && sessionSummary.value.available && !isComposerBusy.value;
 });
 
 const scrollToBottom = async () => {
@@ -362,18 +768,16 @@ const extractContentText = (content: unknown): string => {
 const hydrateConversation = async (payload: CustomerConversationDetail) => {
   upsertConversationSummary(payload);
   activeConversationId.value = payload.id;
-  messages.value = payload.messages.map((item) => ({
-    id: `persisted-${item.id}`,
-    role: item.role,
-    content: item.content,
-    accountLabel: item.account_label,
-  }));
+  messages.value = payload.messages.map((item) => buildMessageFromPersistedItem(item));
+  pendingAttachments.value = [];
+  resetAttachmentInput();
 
   const nextOptions = uniqModelOptions([payload.model_name, ...modelOptions.value, ...defaultConsumerModels]);
   modelOptions.value = nextOptions;
   if (payload.model_name && nextOptions.includes(payload.model_name)) {
     selectedModel.value = payload.model_name;
   }
+  selectedReasoning.value = normalizeReasoningSelection(payload.model_name || selectedModel.value, payload.reasoning_effort || '');
 
   await scrollToBottom();
 };
@@ -406,6 +810,7 @@ const refreshChatEntry = async () => {
 const createConversation = async () => {
   const response = await RequestApi('/0x/user/chat-conversations', 'POST', {
     model_name: selectedModel.value,
+    reasoning_effort: selectedReasoning.value,
   });
   if (!response.ok) return null;
   const payload = (await response.json()) as CustomerConversationSummary;
@@ -417,10 +822,11 @@ const createConversation = async () => {
 
 const serializeConversationMessages = () => {
   return messages.value
-    .filter((item) => item.role === 'user' || Boolean(item.content.trim()))
+    .filter((item) => item.role === 'user' || hasRenderableMessageContent(item))
     .map((item) => ({
       role: item.role,
       content: item.content,
+      content_blocks: normalizeContentBlocks(item.contentBlocks, item.content),
       account_label: item.accountLabel || '',
     }));
 };
@@ -432,6 +838,7 @@ const syncActiveConversation = async () => {
 
   const response = await RequestApi(`/0x/user/chat-conversations/${activeConversationId.value}`, 'PUT', {
     model_name: selectedModel.value,
+    reasoning_effort: selectedReasoning.value,
     messages: serializeConversationMessages(),
   });
   if (!response.ok) return null;
@@ -449,6 +856,8 @@ const startNewConversation = async (syncRoute = true, prefill = '') => {
   activeConversationId.value = null;
   messages.value = [];
   draft.value = prefill;
+  pendingAttachments.value = [];
+  resetAttachmentInput();
   currentEntry.value = null;
 
   if (syncRoute) {
@@ -492,6 +901,61 @@ const handleComposerKeydown = async (event: KeyboardEvent) => {
   await sendMessage();
 };
 
+const resetAttachmentInput = () => {
+  if (fileInputRef.value) {
+    fileInputRef.value.value = '';
+  }
+};
+
+const triggerAttachmentPicker = () => {
+  if (!sessionSummary.value.available || isComposerBusy.value) {
+    return;
+  }
+  fileInputRef.value?.click();
+};
+
+const removePendingAttachment = (attachmentId: string) => {
+  pendingAttachments.value = pendingAttachments.value.filter((item) => item.id !== attachmentId);
+};
+
+const handleAttachmentSelect = async (event: Event) => {
+  const target = event.target as HTMLInputElement | null;
+  const selectedFiles = Array.from(target?.files || []);
+  resetAttachmentInput();
+
+  if (!selectedFiles.length) {
+    return;
+  }
+
+  const availableSlots = MAX_ATTACHMENTS_PER_MESSAGE - pendingAttachments.value.length;
+  if (availableSlots <= 0) {
+    MessagePlugin.warning(`单条消息最多上传 ${MAX_ATTACHMENTS_PER_MESSAGE} 个附件`);
+    return;
+  }
+
+  const acceptedFiles = selectedFiles.slice(0, availableSlots);
+  if (acceptedFiles.length < selectedFiles.length) {
+    MessagePlugin.warning(`超出部分已忽略，单条消息最多上传 ${MAX_ATTACHMENTS_PER_MESSAGE} 个附件`);
+  }
+
+  const nextAttachments = [];
+  for (const file of acceptedFiles) {
+    try {
+      const attachment = await buildComposerAttachment(file);
+      if (attachment) {
+        nextAttachments.push(attachment);
+      }
+    } catch (error) {
+      console.error(error);
+      MessagePlugin.error(`${file.name} 读取失败`);
+    }
+  }
+
+  if (nextAttachments.length) {
+    pendingAttachments.value = [...pendingAttachments.value, ...nextAttachments];
+  }
+};
+
 const applyPrompt = async (prompt: string) => {
   draft.value = prompt;
   await sendMessage();
@@ -531,6 +995,7 @@ const upsertAssistantText = (messageId: string, nextText: string, append = true)
   const assistantMessage = messages.value.find((item) => item.id === messageId);
   if (!assistantMessage) return;
   assistantMessage.content = append ? `${assistantMessage.content}${nextText}` : nextText;
+  assistantMessage.contentBlocks = normalizeContentBlocks([], assistantMessage.content);
 };
 
 const handleStreamPayload = async (payloadText: string, messageId: string) => {
@@ -602,6 +1067,7 @@ const finishAssistantMessage = (messageId: string) => {
   if (!assistantMessage.content.trim()) {
     assistantMessage.content = '本次请求没有返回可展示的文本内容。';
   }
+  assistantMessage.contentBlocks = normalizeContentBlocks([], assistantMessage.content);
 };
 
 const buildRequestMessages = () => {
@@ -609,11 +1075,13 @@ const buildRequestMessages = () => {
     .filter((item) => item.role === 'user' || (item.role === 'assistant' && item.content.trim()))
     .map((item) => ({
       role: item.role,
-      content: item.content,
+      content: serializeRequestMessageContent(item),
     }));
 };
 
-const requestAssistantReply = async (requestMessages: Array<{ role: string; content: string }>) => {
+const requestAssistantReply = async (
+  requestMessages: Array<{ role: string; content: string | CustomerConversationMessageContentBlock[] }>,
+) => {
   if (!requestMessages.length) {
     return;
   }
@@ -625,6 +1093,7 @@ const requestAssistantReply = async (requestMessages: Array<{ role: string; cont
     id: assistantMessageId,
     role: 'assistant',
     content: '',
+    contentBlocks: [],
     pending: true,
   });
   await scrollToBottom();
@@ -651,6 +1120,7 @@ const requestAssistantReply = async (requestMessages: Array<{ role: string; cont
       },
       body: JSON.stringify({
         model: selectedModel.value,
+        reasoning_effort: selectedReasoning.value,
         messages: requestMessages,
         stream: true,
       }),
@@ -689,7 +1159,7 @@ const requestAssistantReply = async (requestMessages: Array<{ role: string; cont
 
 const sendMessage = async () => {
   const content = draft.value.trim();
-  if (!content || sending.value || pending.value || !sessionSummary.value.available || conversationLoading.value) {
+  if ((!content && !pendingAttachments.value.length) || sending.value || pending.value || !sessionSummary.value.available || conversationLoading.value) {
     return;
   }
 
@@ -700,13 +1170,17 @@ const sendMessage = async () => {
       return;
     }
 
+    const contentBlocks = buildUserMessageContentBlocks(content, pendingAttachments.value);
     const userMessage: ChatMessage = {
       id: createMessageId('user'),
       role: 'user',
       content,
+      contentBlocks,
     };
     messages.value.push(userMessage);
     draft.value = '';
+    pendingAttachments.value = [];
+    resetAttachmentInput();
     await syncComposerHeights();
     await syncActiveConversation();
     await requestAssistantReply(buildRequestMessages());
@@ -773,9 +1247,26 @@ watch(selectedModel, async (nextModel, previousModel) => {
   }
 
   modelOptions.value = uniqModelOptions([nextModel, ...modelOptions.value, ...defaultConsumerModels]);
+  selectedReasoning.value = normalizeReasoningSelection(nextModel, selectedReasoning.value);
   await refreshChatEntry();
 
-  if (activeConversationId.value && !sending.value && !pending.value) {
+  if (activeConversationId.value && !sending.value && !pending.value && !conversationLoading.value) {
+    await syncActiveConversation();
+  }
+});
+
+watch(selectedReasoning, async (nextValue, previousValue) => {
+  if (!nextValue || nextValue === previousValue) {
+    return;
+  }
+
+  const normalized = normalizeReasoningSelection(selectedModel.value, nextValue);
+  if (normalized !== nextValue) {
+    selectedReasoning.value = normalized;
+    return;
+  }
+
+  if (activeConversationId.value && !sending.value && !pending.value && !conversationLoading.value) {
     await syncActiveConversation();
   }
 });
@@ -793,6 +1284,7 @@ watch(
 
 onMounted(async () => {
   await loadSessionSummary(normalizeStringQuery(route.query.model));
+  selectedReasoning.value = normalizeReasoningSelection(selectedModel.value, selectedReasoning.value);
   await refreshChatEntry();
   if (!conversations.value.length) {
     await loadConversationList();
@@ -823,6 +1315,13 @@ onMounted(async () => {
   backdrop-filter: blur(18px);
 }
 
+.workspace-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
 .model-switch {
   display: inline-flex;
   align-items: center;
@@ -844,6 +1343,33 @@ onMounted(async () => {
   border: 0;
   background: transparent;
   color: #6b6b66;
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+}
+
+.reasoning-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid rgba(17, 17, 17, 0.06);
+  border-radius: 999px;
+  background: rgba(17, 17, 17, 0.03);
+}
+
+.reasoning-switch-label {
+  color: #6d6d67;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.reasoning-switch-select {
+  min-width: 132px;
+  border: 0;
+  background: transparent;
+  color: #555550;
   font-size: 13px;
   font-weight: 600;
   outline: none;
@@ -871,6 +1397,10 @@ onMounted(async () => {
   color: #6e6e67;
   font-size: 15px;
   font-weight: 600;
+}
+
+.composer-file-input {
+  display: none;
 }
 
 .workspace-empty {
@@ -930,6 +1460,109 @@ onMounted(async () => {
   margin-top: -4px;
 }
 
+.composer-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.composer-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid rgba(17, 17, 17, 0.08);
+  border-radius: 18px;
+  background: #f7f7f5;
+}
+
+.composer-attachment.image {
+  padding-right: 8px;
+}
+
+.composer-attachment-thumb {
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: rgba(17, 17, 17, 0.08);
+  flex-shrink: 0;
+}
+
+.composer-attachment-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.composer-attachment-icon,
+.message-attachment-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: rgba(17, 17, 17, 0.05);
+  color: #5d5d57;
+  flex-shrink: 0;
+}
+
+.composer-attachment-icon :deep(svg),
+.message-attachment-icon :deep(svg),
+.composer-attachment-remove span :deep(svg) {
+  width: 18px;
+  height: 18px;
+}
+
+.composer-attachment-copy,
+.message-attachment-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.composer-attachment-copy strong,
+.message-attachment-copy strong {
+  overflow: hidden;
+  color: #161614;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-attachment-copy span,
+.message-attachment-copy span {
+  color: #7a7a73;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.composer-attachment-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #7a7a73;
+  cursor: pointer;
+}
+
+.composer-attachment-remove:hover {
+  background: rgba(17, 17, 17, 0.05);
+  color: #1c1c1a;
+}
+
 .composer-frame {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -953,7 +1586,12 @@ onMounted(async () => {
   border-radius: 999px;
   background: #f4f4f2;
   color: #76766f;
-  cursor: default;
+  cursor: pointer;
+}
+
+.composer-utility:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .composer-utility span,
@@ -1008,11 +1646,25 @@ onMounted(async () => {
   margin-top: 8px;
 }
 
+.composer-meta-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .composer-disclaimer {
   margin: 0;
   color: #83837b;
   font-size: 12px;
   line-height: 1.6;
+}
+
+.composer-support-note {
+  margin: 0;
+  color: #9a9a93;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .composer-disclaimer.warning {
@@ -1137,6 +1789,12 @@ onMounted(async () => {
   color: #191919;
 }
 
+.message-user-payload {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .message-body.bubble {
   width: auto;
   max-width: min(72%, 680px);
@@ -1155,6 +1813,46 @@ onMounted(async () => {
   line-height: 1.85;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.message-attachment-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.message-attachment-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 220px;
+  max-width: min(100%, 420px);
+  padding: 10px 12px;
+  border: 1px solid rgba(17, 17, 17, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.48);
+  color: inherit;
+  text-decoration: none;
+}
+
+.message-attachment-card.image {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  max-width: min(100%, 360px);
+  padding: 8px;
+}
+
+.message-attachment-card:hover {
+  border-color: rgba(17, 17, 17, 0.14);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.message-attachment-image {
+  display: block;
+  width: 100%;
+  max-height: 240px;
+  border-radius: 14px;
+  object-fit: cover;
 }
 
 .message-rich {
@@ -1311,6 +2009,15 @@ onMounted(async () => {
     padding: 14px 18px 12px;
   }
 
+  .workspace-controls {
+    width: 100%;
+  }
+
+  .model-switch,
+  .reasoning-switch {
+    width: 100%;
+  }
+
   .workspace-status {
     text-align: left;
   }
@@ -1337,6 +2044,11 @@ onMounted(async () => {
 
   .message-body.bubble {
     max-width: 88%;
+  }
+
+  .message-attachment-card {
+    min-width: 0;
+    max-width: 100%;
   }
 }
 </style>

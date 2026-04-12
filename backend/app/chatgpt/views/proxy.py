@@ -5,6 +5,7 @@ from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from rest_framework.views import APIView
 
 from app.accounts.quota import build_user_quota_status
+from app.chatgpt.content_blocks import FILE_BLOCK_TYPE, IMAGE_BLOCK_TYPE, TEXT_BLOCK_TYPE, normalize_chat_content_blocks
 from app.chatgpt.relay import build_proxy_headers, build_relay_chat_completions_url, \
     forward_request, get_gateway_account_mirror_token, is_stream_request, resolve_proxy_mirror_token
 from app.chatgpt.usage import save_usage_ledger
@@ -46,30 +47,45 @@ class ChatCompletionsProxyView(APIView):
             return None
 
     @staticmethod
-    def _stringify_message_content(content):
-        if isinstance(content, str):
-            return content
+    def _convert_block_to_responses_content(block):
+        block_type = str(block.get("type") or "").strip()
+        if block_type == TEXT_BLOCK_TYPE:
+            text = str(block.get("text") or "")
+            if not text.strip():
+                return None
+            return {
+                "type": "input_text",
+                "text": text,
+            }
 
-        if isinstance(content, list):
-            text_parts = []
-            for item in content:
-                if isinstance(item, str):
-                    text_parts.append(item)
-                    continue
-                if not isinstance(item, dict):
-                    continue
-                item_type = str(item.get("type") or "").strip()
-                if item_type in {"text", "input_text", "output_text"}:
-                    text_parts.append(str(item.get("text") or ""))
-                    continue
-                if isinstance(item.get("text"), str):
-                    text_parts.append(item["text"])
-            return "".join(text_parts)
+        if block_type == IMAGE_BLOCK_TYPE:
+            image_payload = block.get("image_url") or {}
+            image_url = str(image_payload.get("url") or "").strip()
+            if not image_url:
+                return None
+            normalized = {
+                "type": "input_image",
+                "image_url": image_url,
+            }
+            detail = str(image_payload.get("detail") or "").strip()
+            if detail:
+                normalized["detail"] = detail
+            return normalized
 
-        if isinstance(content, dict):
-            return str(content.get("text") or "")
+        if block_type == FILE_BLOCK_TYPE:
+            file_payload = block.get("file") or {}
+            normalized = {
+                "type": "input_file",
+            }
+            for key in ("filename", "file_data", "file_id", "file_url"):
+                value = str(file_payload.get(key) or "").strip()
+                if value:
+                    normalized[key] = value
+            if "file_data" not in normalized and "file_id" not in normalized and "file_url" not in normalized:
+                return None
+            return normalized
 
-        return ""
+        return None
 
     @classmethod
     def _should_use_relay_responses_compat(cls, account, model_name):
@@ -97,26 +113,47 @@ class ChatCompletionsProxyView(APIView):
             if not isinstance(message, dict):
                 continue
             role = str(message.get("role") or "").strip().lower()
-            text = cls._stringify_message_content(message.get("content")).strip()
-            if not text:
+            content_blocks = normalize_chat_content_blocks(message.get("content"))
+            if not content_blocks:
                 continue
 
             if role == "system":
-                instructions_list.append(text)
+                system_text = "".join(
+                    str(block.get("text") or "")
+                    for block in content_blocks
+                    if str(block.get("type") or "") == TEXT_BLOCK_TYPE
+                ).strip()
+                if system_text:
+                    instructions_list.append(system_text)
                 continue
 
             if role not in {"user", "assistant", "developer"}:
                 role = "user"
 
+            content_items = []
+            for block in content_blocks:
+                normalized_block = cls._convert_block_to_responses_content(block)
+                if normalized_block:
+                    content_items.append(normalized_block)
+            if not content_items:
+                continue
+
             input_items.append(
                 {
                     "role": role,
-                    "content": text,
+                    "content": content_items,
                 }
             )
 
         payload["instructions"] = str(payload.get("instructions") or "\n\n".join(instructions_list)).strip() or cls.DEFAULT_RESPONSES_INSTRUCTIONS
         payload["input"] = input_items
+        reasoning_effort = str(payload.pop("reasoning_effort", "") or "").strip()
+        if reasoning_effort:
+            reasoning_payload = payload.get("reasoning")
+            if not isinstance(reasoning_payload, dict):
+                reasoning_payload = {}
+            reasoning_payload["effort"] = reasoning_effort
+            payload["reasoning"] = reasoning_payload
 
         if "max_tokens" in payload and "max_output_tokens" not in payload:
             payload["max_output_tokens"] = payload.pop("max_tokens")

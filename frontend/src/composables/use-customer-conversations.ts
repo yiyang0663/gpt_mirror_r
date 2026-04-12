@@ -6,6 +6,7 @@ export interface CustomerConversationSummary {
   id: number;
   title: string;
   model_name: string;
+  reasoning_effort: string;
   preview_text: string;
   message_count: number;
   last_message_at: number;
@@ -13,10 +14,28 @@ export interface CustomerConversationSummary {
   updated_time: number;
 }
 
+export interface CustomerConversationMessageContentBlock {
+  type: 'text' | 'image_url' | 'file';
+  text?: string;
+  image_url?: {
+    url: string;
+    detail?: string;
+  };
+  file?: {
+    filename?: string;
+    mime_type?: string;
+    size?: number;
+    file_data?: string;
+    file_id?: string;
+    file_url?: string;
+  };
+}
+
 export interface CustomerPersistedConversationMessage {
   id: number;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  content_blocks: CustomerConversationMessageContentBlock[];
   account_label: string;
   sequence: number;
   created_time: number;

@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from app.accounts.models import User
+from app.chatgpt.content_blocks import summarize_content_blocks
 from app.chatgpt.models import ChatConversation, ChatConversationMessage
 from app.chatgpt.serializers import (
     CreateChatConversationSerializer,
@@ -31,7 +32,9 @@ def build_conversation_title(messages, fallback="新对话"):
     for item in messages:
         if item["role"] != ChatConversationMessage.ROLE_USER:
             continue
-        text = " ".join(str(item.get("content") or "").split()).strip()
+        text = " ".join(
+            summarize_content_blocks(item.get("content_blocks") or item.get("content") or "").split()
+        ).strip()
         if not text:
             continue
         if len(text) > 36:
@@ -42,7 +45,9 @@ def build_conversation_title(messages, fallback="新对话"):
 
 def build_preview_text(messages):
     for item in reversed(messages):
-        text = " ".join(str(item.get("content") or "").split()).strip()
+        text = " ".join(
+            summarize_content_blocks(item.get("content_blocks") or item.get("content") or "").split()
+        ).strip()
         if text:
             if len(text) > 120:
                 return f"{text[:120].rstrip()}..."
@@ -77,6 +82,7 @@ class CurrentUserConversationListView(APIView):
             user=request.user,
             title=serializer.validated_data.get("title") or "新对话",
             model_name=serializer.validated_data.get("model_name") or "",
+            reasoning_effort=serializer.validated_data.get("reasoning_effort") or "",
             preview_text="",
             message_count=0,
             last_message_at=0,
@@ -112,6 +118,7 @@ class CurrentUserConversationDetailView(APIView):
                     conversation=conversation,
                     role=item["role"],
                     content=item.get("content", ""),
+                    content_blocks=item.get("content_blocks", []),
                     account_label=item.get("account_label", ""),
                     sequence=index,
                     created_time=now,
@@ -123,6 +130,7 @@ class CurrentUserConversationDetailView(APIView):
 
         conversation.title = title
         conversation.model_name = serializer.validated_data.get("model_name") or conversation.model_name
+        conversation.reasoning_effort = serializer.validated_data.get("reasoning_effort") or conversation.reasoning_effort
         conversation.message_count = len(payload_messages)
         conversation.preview_text = build_preview_text(payload_messages)
         conversation.last_message_at = now if payload_messages else 0
@@ -131,6 +139,7 @@ class CurrentUserConversationDetailView(APIView):
             update_fields=[
                 "title",
                 "model_name",
+                "reasoning_effort",
                 "message_count",
                 "preview_text",
                 "last_message_at",
